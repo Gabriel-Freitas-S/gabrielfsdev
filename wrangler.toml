@@ -1,18 +1,36 @@
 name = "gabrielfsdev"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-12-31"
+main = "./dist/_worker.js/index.js"
+compatibility_flags = [ "nodejs_compat" ]
 
-[[kv_namespaces]]
-binding = "MY_KV"
-id = "preview"
-preview_id = "preview"
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+[build]
+command = "npm run build"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "gabrielfs-db"
-database_id = "local-db"
-preview_database_id = "local-db"
+database_id = "9f42d962-194d-4ae6-ba4c-1ac69e5a7b3d"
+preview_database_id = "9f42d962-194d-4ae6-ba4c-1ac69e5a7b3d"
 
 [[r2_buckets]]
+binding = "R2"
+bucket_name = "gabrielfs-hero"
+preview_bucket_name = "gabrielfs-hero-preview"
+
+[env.preview]
+compatibility_flags = [ "nodejs_compat" ]
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "gabrielfs-db"
+database_id = "9f42d962-194d-4ae6-ba4c-1ac69e5a7b3d"
+preview_database_id = "9f42d962-194d-4ae6-ba4c-1ac69e5a7b3d"
+
+[[env.preview.r2_buckets]]
 binding = "R2"
 bucket_name = "gabrielfs-hero"
 preview_bucket_name = "gabrielfs-hero-preview"

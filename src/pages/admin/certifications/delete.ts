@@ -1,11 +1,15 @@
----
-export const POST = async ({ request, locals, redirect }) => {
-    const url = new URL(request.url);
-    const id = url.searchParams.get("id");
+import type { APIRoute } from "astro";
 
-    if (id && locals.runtime?.env?.DB) {
-        await locals.runtime.env.DB.prepare("DELETE FROM certifications WHERE id = ?").bind(id).run();
-    }
+export const prerender = false;
 
-    return redirect("/admin/certifications");
+export const POST: APIRoute = async ({ request, locals, redirect }) => {
+	const url = new URL(request.url);
+	const id = url.searchParams.get("id");
+
+	if (id && locals.runtime?.env?.DB) {
+		await locals.runtime.env.DB.prepare("DELETE FROM certifications WHERE id = ?").bind(id).run();
+	}
+
+	return redirect("/admin/certifications");
 };
+

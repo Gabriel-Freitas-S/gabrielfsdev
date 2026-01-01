@@ -14,9 +14,9 @@ export default defineConfig({
   },
 
   image: {
-    // Usa sharp apenas em build/prerender; evita uso de sharp no runtime Cloudflare.
+    // Usa squoosh (WASM) para evitar dependência de sharp em runtime Cloudflare.
     service: {
-      entrypoint: 'astro/assets/services/compile'
+      entrypoint: 'astro/assets/services/squoosh'
     }
   },
 

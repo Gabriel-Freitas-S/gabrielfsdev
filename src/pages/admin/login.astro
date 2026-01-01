@@ -1,6 +1,13 @@
 ---
 import Layout from "../../layouts/Layout.astro";
-const { createHash } = await import("node:crypto");
+
+const hashHex = async (value: string) => {
+    const data = new TextEncoder().encode(value);
+    const digest = await crypto.subtle.digest("SHA-256", data);
+    return Array.from(new Uint8Array(digest))
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+};
 
 async function ensureSettings(env: any) {
     if (!env?.DB) return;
@@ -27,7 +34,7 @@ if (Astro.request.method === "POST") {
     try {
         await ensureSettings(env);
         const data = await Astro.request.formData();
-        const password = data.get("password");
+        const password = String(data.get("password") ?? "");
 
         const envPassword = env?.ADMIN_PASSWORD;
         const storedHash = await getStoredHash(env);
@@ -37,12 +44,9 @@ if (Astro.request.method === "POST") {
             throw new Error("No admin password configured");
         }
 
-        const hash = (value: string) =>
-            createHash("sha256").update(value).digest("hex");
-
         const isValid = storedHash
-            ? hash(String(password)) === storedHash
-            : String(password) === envPassword;
+            ? (await hashHex(password)) === storedHash
+            : password === envPassword;
 
         if (isValid) {
             Astro.cookies.set("admin_session", "true", {

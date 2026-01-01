@@ -1,10 +1,10 @@
 /// <reference path="../.astro/types.d.ts" />
 
-type KVNamespace = import("@cloudflare/workers-types").KVNamespace;
+type R2Bucket = import("@cloudflare/workers-types").R2Bucket;
 
 type ENV = {
-    MY_KV: KVNamespace;
     DB: D1Database;
+    R2: R2Bucket;
 };
 
 type Runtime = import("@astrojs/cloudflare").Runtime<ENV>;
