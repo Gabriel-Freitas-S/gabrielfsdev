@@ -1,5 +1,6 @@
 ---
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import { ensureCoreTables } from "../../utils/db";
 
 const runtime = Astro.locals.runtime;
 const env = runtime?.env;
@@ -9,6 +10,7 @@ let certCount = 0;
 
 try {
     if (env?.DB) {
+        await ensureCoreTables(env);
         const { results: experiences } = await env.DB.prepare(
             "SELECT COUNT(*) as count FROM experiences",
         ).run();

@@ -95,6 +95,55 @@ const { title } = Astro.props;
             </div>
         </div>
 
+        <div
+            id="auth-modal"
+            class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="auth-modal-title"
+        >
+            <div class="bg-slate-900 border border-slate-700 rounded-lg shadow-xl w-full max-w-md p-6 space-y-4">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <h2 id="auth-modal-title" class="text-lg font-semibold">Confirme para continuar</h2>
+                        <p class="text-sm text-slate-400">Digite a senha do painel para autorizar esta ação.</p>
+                    </div>
+                    <button id="auth-modal-close" class="btn btn-ghost">✕</button>
+                </div>
+
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-sm font-medium mb-1" for="auth-password">Senha</label>
+                        <input
+                            id="auth-password"
+                            name="password"
+                            type="password"
+                            autocomplete="current-password"
+                            inputmode="text"
+                            class="w-full surface rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                        />
+                    </div>
+                    <div id="auth-totp-wrapper" class="hidden">
+                        <label class="block text-sm font-medium mb-1" for="auth-code">Código 2FA</label>
+                        <input
+                            id="auth-code"
+                            type="text"
+                            inputmode="numeric"
+                            pattern="[0-9]{6}"
+                            autocomplete="one-time-code"
+                            class="w-full surface rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                        />
+                        <p class="text-xs text-slate-500 mt-1">Use o código do seu aplicativo autenticador.</p>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-2">
+                    <button id="auth-cancel" class="btn btn-ghost">Cancelar</button>
+                    <button id="auth-confirm" class="btn btn-primary">Confirmar</button>
+                </div>
+            </div>
+        </div>
+
         <script is:inline>
             (() => {
                 const html = document.documentElement;
@@ -102,6 +151,15 @@ const { title } = Astro.props;
                 const themeIcon = document.getElementById("admin-theme-icon");
                 const menuBtn = document.getElementById("admin-menu-toggle");
                 const sidebar = document.getElementById("admin-sidebar");
+                const modal = document.getElementById("auth-modal");
+                const modalClose = document.getElementById("auth-modal-close");
+                const modalCancel = document.getElementById("auth-cancel");
+                const modalConfirm = document.getElementById("auth-confirm");
+                const passwordInput = document.getElementById("auth-password");
+                const codeWrapper = document.getElementById("auth-totp-wrapper");
+                const codeInput = document.getElementById("auth-code");
+                let activeForm = null;
+                let requireTotp = false;
 
                 const applyIcon = () => {
                     const isDark = html.dataset.theme === "dark";
@@ -121,6 +179,93 @@ const { title } = Astro.props;
                     const isOpen = sidebar?.classList.contains("hidden") === false;
                     sidebar?.classList.toggle("hidden", isOpen);
                     menuBtn.setAttribute("aria-expanded", String(!isOpen));
+                });
+
+                const openModal = (form) => {
+                    activeForm = form;
+                    requireTotp = form?.dataset?.auth2fa === "true";
+                    codeWrapper?.classList.toggle("hidden", !requireTotp);
+                    passwordInput.value = "";
+                    if (codeInput) codeInput.value = "";
+                    modal?.classList.remove("hidden");
+                    passwordInput?.focus();
+                };
+
+                const closeModal = () => {
+                    modal?.classList.add("hidden");
+                    activeForm = null;
+                    requireTotp = false;
+                };
+
+                const handleConfirm = () => {
+                    if (!activeForm) return;
+                    const form = activeForm;
+                    const pwd = passwordInput.value.trim();
+                    const code = codeInput?.value?.trim() || "";
+                    if (!pwd) {
+                        passwordInput.focus();
+                        return;
+                    }
+                    if (requireTotp && !/^[0-9]{6}$/.test(code)) {
+                        codeInput?.focus();
+                        return;
+                    }
+
+                    let pwdField = form.querySelector('input[name="password"][data-injected="true"]');
+                    if (!pwdField) {
+                        pwdField = document.createElement("input");
+                        pwdField.type = "hidden";
+                        pwdField.name = "password";
+                        pwdField.setAttribute("data-injected", "true");
+                        form.appendChild(pwdField);
+                    }
+                    pwdField.value = pwd;
+
+                    if (requireTotp) {
+                        let codeField = form.querySelector('input[name="code"][data-injected="true"]');
+                        if (!codeField) {
+                            codeField = document.createElement("input");
+                            codeField.type = "hidden";
+                            codeField.name = "code";
+                            codeField.setAttribute("data-injected", "true");
+                            form.appendChild(codeField);
+                        }
+                        codeField.value = code;
+                    }
+
+                    form.dataset.authIgnore = "true";
+                    form.submit();
+                    setTimeout(() => {
+                        delete form.dataset.authIgnore;
+                    }, 100);
+                    closeModal();
+                };
+
+                document.querySelectorAll("form[data-require-auth]").forEach((form) => {
+                    form.addEventListener("submit", (ev) => {
+                        if (form.dataset.authIgnore === "true") return;
+                        ev.preventDefault();
+                        openModal(form);
+                    });
+                });
+
+                modalClose?.addEventListener("click", closeModal);
+                modalCancel?.addEventListener("click", closeModal);
+                modal?.addEventListener("click", (ev) => {
+                    if (ev.target === modal) closeModal();
+                });
+                modalConfirm?.addEventListener("click", handleConfirm);
+                passwordInput?.addEventListener("keydown", (ev) => {
+                    if (ev.key === "Enter") {
+                        ev.preventDefault();
+                        handleConfirm();
+                    }
+                });
+                codeInput?.addEventListener("keydown", (ev) => {
+                    if (ev.key === "Enter") {
+                        ev.preventDefault();
+                        handleConfirm();
+                    }
                 });
             })();
         </script>

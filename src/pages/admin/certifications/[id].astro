@@ -1,5 +1,8 @@
 ---
+import { z } from "zod";
 import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { ensureAdminTables, verifyPassword } from "../../../utils/auth";
+import { ensureCoreTables } from "../../../utils/db";
 
 const { id } = Astro.params;
 const isNew = id === "new";
@@ -14,36 +17,91 @@ let cert = {
     group_name: "",
 };
 
+let errorMessage = "";
+
+const certSchema = z.object({
+    title: z.string().min(2, "Informe o título."),
+    issuer: z.string().min(2, "Informe o emissor."),
+    date: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/u, "Data inválida."),
+    hours: z.coerce.number().nonnegative(),
+    url: z
+        .string()
+        .trim()
+        .optional()
+        .transform((v) => v || ""),
+    group_name: z
+        .string()
+        .trim()
+        .max(120)
+        .optional()
+        .transform((v) => v || ""),
+    password: z.string().min(8, "Senha obrigatória."),
+});
+
 if (Astro.request.method === "POST") {
     try {
+        await ensureAdminTables(env);
+        await ensureCoreTables(env);
         const formData = await Astro.request.formData();
-        const title = formData.get("title");
-        const issuer = formData.get("issuer");
-        const date = formData.get("date");
-        const hours = formData.get("hours");
-        const url = formData.get("url");
-        const group_name = formData.get("group_name");
+        const parsed = certSchema.safeParse({
+            title: formData.get("title"),
+            issuer: formData.get("issuer"),
+            date: formData.get("date"),
+            hours: formData.get("hours"),
+            url: formData.get("url"),
+            group_name: formData.get("group_name"),
+            password: formData.get("password"),
+        });
 
-        if (isNew) {
-            await env.DB.prepare(
-                "INSERT INTO certifications (title, issuer, date, hours, url, group_name) VALUES (?, ?, ?, ?, ?, ?)",
-            )
-                .bind(title, issuer, date, hours, url, group_name)
-                .run();
+        if (!parsed.success) {
+            errorMessage = parsed.error.issues[0]?.message || "Dados inválidos.";
         } else {
-            await env.DB.prepare(
-                "UPDATE certifications SET title=?, issuer=?, date=?, hours=?, url=?, group_name=? WHERE id=?",
-            )
-                .bind(title, issuer, date, hours, url, group_name, id)
-                .run();
+            const { password, ...payload } = parsed.data;
+            const passwordOk = await verifyPassword(password, env);
+            if (!passwordOk) {
+                throw new Error("Senha incorreta. Somente ações autenticadas podem alterar dados.");
+            }
+
+            if (isNew) {
+                await env.DB.prepare(
+                    "INSERT INTO certifications (title, issuer, date, hours, url, group_name) VALUES (?, ?, ?, ?, ?, ?)",
+                )
+                    .bind(
+                        payload.title,
+                        payload.issuer,
+                        payload.date,
+                        payload.hours,
+                        payload.url,
+                        payload.group_name,
+                    )
+                    .run();
+            } else {
+                await env.DB.prepare(
+                    "UPDATE certifications SET title=?, issuer=?, date=?, hours=?, url=?, group_name=? WHERE id=?",
+                )
+                    .bind(
+                        payload.title,
+                        payload.issuer,
+                        payload.date,
+                        payload.hours,
+                        payload.url,
+                        payload.group_name,
+                        id,
+                    )
+                    .run();
+            }
+            return Astro.redirect("/admin/certifications");
         }
-        return Astro.redirect("/admin/certifications");
-    } catch (e) {
+    } catch (e: any) {
         console.error(e);
+        errorMessage = errorMessage || e?.message || "Erro ao salvar certificação.";
     }
 }
 
 if (!isNew && Astro.request.method === "GET") {
+    await ensureCoreTables(env);
     const result = await env.DB.prepare(
         "SELECT * FROM certifications WHERE id = ?",
     )
@@ -58,7 +116,13 @@ if (!isNew && Astro.request.method === "GET") {
         {isNew ? "Nova Certificação" : "Editar Certificação"}
     </h1>
 
-    <form method="POST" class="max-w-2xl space-y-6">
+    {errorMessage && (
+        <div class="mb-4 rounded-lg border border-red-500/60 bg-red-500/10 text-red-200 px-4 py-3 text-sm">
+            {errorMessage}
+        </div>
+    )}
+
+    <form method="POST" class="max-w-2xl space-y-6" data-require-auth>
         <div>
             <label class="block text-sm font-medium mb-1">Título</label>
             <input

@@ -6,6 +6,23 @@ let experiences = [];
 const runtime = Astro.locals.runtime;
 const env = runtime?.env;
 
+function normalizeAchievements(raw: any): string[] {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.map((item) => String(item));
+    if (typeof raw === "string") {
+        const trimmed = raw.trim();
+        if (!trimmed) return [];
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) return parsed.map((item) => String(item));
+        } catch (e) {
+            // fall through to wrap as single entry
+        }
+        return [trimmed];
+    }
+    return [];
+}
+
 try {
     if (env?.DB) {
         const { results } = await env.DB.prepare(
@@ -14,20 +31,20 @@ try {
         const source = results.length ? results : legacyExperiences;
         experiences = source.map((xp: any) => ({
             ...xp,
-            achievements: xp.achievements ?? JSON.stringify(xp.achievements ?? []),
+            achievements: normalizeAchievements(xp.achievements),
         }));
     } else {
         // Fallback with legacy data for local/dev when DB is not available
         experiences = legacyExperiences.map((xp) => ({
             ...xp,
-            achievements: JSON.stringify(xp.achievements),
+            achievements: normalizeAchievements(xp.achievements),
         }));
     }
 } catch (e) {
     console.error("Error fetching experiences:", e);
     experiences = legacyExperiences.map((xp) => ({
         ...xp,
-        achievements: JSON.stringify(xp.achievements),
+        achievements: normalizeAchievements(xp.achievements),
     }));
 }
 
@@ -75,21 +92,18 @@ function formatDate(dateStr: string) {
                                 {xp.description}
                             </p>
 
-                            {xp.achievements &&
-                                JSON.parse(xp.achievements).length > 0 && (
-                                    <div class="surface-soft p-4 rounded-lg">
-                                        <h4 class="text-sm font-bold text-muted uppercase tracking-wider mb-2">
-                                            Principais Conquistas
-                                        </h4>
-                                        <ul class="list-disc list-inside space-y-1 text-sm">
-                                            {JSON.parse(xp.achievements).map(
-                                                (item: string) => (
-                                                    <li>{item}</li>
-                                                ),
-                                            )}
-                                        </ul>
-                                    </div>
-                                )}
+                            {xp.achievements && xp.achievements.length > 0 && (
+                                <div class="surface-soft p-4 rounded-lg">
+                                    <h4 class="text-sm font-bold text-muted uppercase tracking-wider mb-2">
+                                        Principais Conquistas
+                                    </h4>
+                                    <ul class="list-disc list-inside space-y-1 text-sm">
+                                        {xp.achievements.map((item: string) => (
+                                            <li>{item}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
                         </div>
                     </div>
                 ))

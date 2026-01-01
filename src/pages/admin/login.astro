@@ -1,68 +1,98 @@
 ---
+import { z } from "zod";
 import Layout from "../../layouts/Layout.astro";
-
-const hashHex = async (value: string) => {
-    const data = new TextEncoder().encode(value);
-    const digest = await crypto.subtle.digest("SHA-256", data);
-    return Array.from(new Uint8Array(digest))
-        .map((byte) => byte.toString(16).padStart(2, "0"))
-        .join("");
-};
-
-async function ensureSettings(env: any) {
-    if (!env?.DB) return;
-    await env.DB.prepare(
-        "CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
-    ).run();
-}
-
-async function getStoredHash(env: any) {
-    if (!env?.DB) return null;
-    const { results } = await env.DB.prepare(
-        "SELECT value FROM admin_settings WHERE key = 'admin_password' LIMIT 1",
-    ).all();
-    return results?.[0]?.value || null;
-}
+import {
+    SESSION_COOKIE,
+    createSession,
+    ensureAdminTables,
+    getStoredPasswordHash,
+    getTwoFactorSecret,
+    sessionCookieOptions,
+    verifyPassword,
+    verifyTOTP,
+} from "../../utils/auth";
 
 const runtime = Astro.locals.runtime;
 const env = runtime?.env;
+const twoFactorSecret = await getTwoFactorSecret(env);
+const hasTwoFactor = Boolean(twoFactorSecret);
 
-let error = false;
+const codeSchema = z
+    .string()
+    .transform((v) => String(v ?? "").replace(/\s+/g, ""))
+    .refine((v) => /^\d{6}$/.test(v), "Código 2FA deve ter 6 dígitos.");
+
+const loginSchema = hasTwoFactor
+    ? z.object({
+          password: z.string().min(8, "Informe a senha (mínimo 8 caracteres)."),
+          code: codeSchema,
+      })
+    : z.object({
+          password: z.string().min(8, "Informe a senha (mínimo 8 caracteres)."),
+      });
+
+let errorMessage = "";
 let missingPassword = false;
+let missingTwoFactor = false;
 
 if (Astro.request.method === "POST") {
     try {
-        await ensureSettings(env);
+        await ensureAdminTables(env);
         const data = await Astro.request.formData();
-        const password = String(data.get("password") ?? "");
+        const parsed = loginSchema.safeParse({
+            password: data.get("password"),
+            code: data.get("code"),
+        });
 
-        const envPassword = env?.ADMIN_PASSWORD;
-        const storedHash = await getStoredHash(env);
+        if (!parsed.success) {
+            errorMessage = parsed.error.issues[0]?.message || "Dados inválidos.";
+        } else {
+            const { password } = parsed.data;
+            const storedHash = await getStoredPasswordHash(env);
+            const hasPasswordConfigured = Boolean(storedHash || env?.ADMIN_PASSWORD);
 
-        if (!storedHash && !envPassword) {
-            missingPassword = true;
-            throw new Error("No admin password configured");
-        }
+            if (!hasPasswordConfigured) {
+                missingPassword = true;
+                throw new Error("Nenhuma senha configurada.");
+            }
 
-        const isValid = storedHash
-            ? (await hashHex(password)) === storedHash
-            : password === envPassword;
+            const passwordOk = await verifyPassword(password, env);
+            if (!passwordOk) {
+                throw new Error("Senha incorreta.");
+            }
 
-        if (isValid) {
-            Astro.cookies.set("admin_session", "true", {
-                path: "/",
-                httpOnly: true,
-                secure: Astro.request.url.startsWith("https"),
-                sameSite: "Lax",
-                maxAge: 60 * 60 * 24, // 1 day
+            if (hasTwoFactor) {
+                const totpOk = await verifyTOTP(twoFactorSecret as string, parsed.data.code as string);
+                if (!totpOk) {
+                    throw new Error("Código 2FA inválido.");
+                }
+
+                const session = await createSession(env, Astro.request, {
+                    twoFactorVerified: true,
+                });
+
+                Astro.cookies.set(
+                    SESSION_COOKIE,
+                    session.token,
+                    sessionCookieOptions(Astro.request.url),
+                );
+                return Astro.redirect("/admin/dashboard");
+            }
+
+            const session = await createSession(env, Astro.request, {
+                twoFactorVerified: true,
             });
-            return Astro.redirect("/admin/dashboard");
-        }
 
-        error = true;
-    } catch (e) {
+            Astro.cookies.set(
+                SESSION_COOKIE,
+                session.token,
+                sessionCookieOptions(Astro.request.url),
+            );
+            return Astro.redirect("/admin/password?setup2fa=1");
+        }
+    } catch (e: any) {
         console.error(e);
-        error = true;
+        errorMessage = errorMessage || e?.message || "Erro ao autenticar.";
     }
 }
 ---
@@ -70,15 +100,15 @@ if (Astro.request.method === "POST") {
 <Layout title="Admin Login">
     <div class="flex min-h-screen items-center justify-center px-4">
         <div class="card p-8 w-full max-w-md">
-            <h1 class="text-2xl font-bold mb-6 text-center">
-                Login Administrativo
-            </h1>
+            <h1 class="text-2xl font-bold mb-6 text-center">Login Administrativo</h1>
 
-            {error && (
+            {errorMessage && (
                 <div class="mb-4 rounded-lg border border-red-500/60 bg-red-500/10 text-red-200 px-4 py-3 text-sm">
                     {missingPassword
                         ? "Senha não configurada. Defina ADMIN_PASSWORD no ambiente ou cadastre uma pelo dashboard."
-                        : "Senha inválida. Tente novamente."}
+                        : missingTwoFactor
+                            ? "2FA não configurado. Gere o segredo em /admin/password."
+                            : errorMessage}
                 </div>
             )}
 
@@ -89,14 +119,34 @@ if (Astro.request.method === "POST") {
                         type="password"
                         name="password"
                         id="admin_password"
+                        autocomplete="current-password"
                         required
+                        minlength="8"
                         autofocus
                         class="w-full surface rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
                     />
                 </div>
-                <button class="w-full btn btn-primary justify-center">
-                    Entrar
-                </button>
+                {hasTwoFactor ? (
+                    <div>
+                        <label class="block text-sm font-medium mb-1" for="admin_code">Código 2FA</label>
+                        <input
+                            type="text"
+                            inputmode="numeric"
+                            pattern="[0-9]{6}"
+                            name="code"
+                            id="admin_code"
+                            autocomplete="one-time-code"
+                            required
+                            class="w-full surface rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                        />
+                        <p class="text-xs text-slate-400 mt-1">Use o aplicativo autenticador configurado para este painel.</p>
+                    </div>
+                ) : (
+                    <div class="rounded-lg border border-yellow-600/60 bg-yellow-500/10 text-yellow-100 px-4 py-3 text-sm">
+                        2FA ainda não configurado. Você entrará apenas com a senha e será direcionado para ativar o 2FA.
+                    </div>
+                )}
+                <button class="w-full btn btn-primary justify-center">Entrar</button>
             </form>
         </div>
     </div>

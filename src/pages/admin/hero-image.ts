@@ -1,4 +1,7 @@
 import type { APIRoute } from "astro";
+import { z } from "zod";
+import { verifyPassword } from "../../utils/auth";
+import { ensureCoreTables } from "../../utils/db";
 
 const MAX_SIZE = 2 * 1024 * 1024; // 2MB
 const ALLOWED_TYPE = "image/webp";
@@ -9,6 +12,10 @@ async function ensureTable(env: any) {
         "CREATE TABLE IF NOT EXISTS site_content (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
     ).run();
 }
+
+const uploadSchema = z.object({
+    password: z.string().min(8, "Senha obrigatória"),
+});
 
 export const POST: APIRoute = async ({ request, locals, redirect }) => {
     const env = locals.runtime?.env;
@@ -22,6 +29,17 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
 
     try {
         const form = await request.formData();
+        await ensureCoreTables(env);
+        const parsed = uploadSchema.safeParse({ password: form.get("password") });
+
+        if (!parsed.success) {
+            return new Response("Dados inválidos", { status: 400 });
+        }
+
+        if (!(await verifyPassword(parsed.data.password, env))) {
+            return new Response("Senha incorreta", { status: 401 });
+        }
+
         const file = form.get("image");
 
         if (!(file instanceof File)) {

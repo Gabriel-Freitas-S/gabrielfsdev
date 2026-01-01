@@ -1,5 +1,8 @@
 ---
+import { z } from "zod";
 import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { ensureAdminTables, verifyPassword } from "../../../utils/auth";
+import { ensureCoreTables } from "../../../utils/db";
 
 const { id } = Astro.params;
 const isNew = id === "new";
@@ -14,58 +17,95 @@ let xp = {
     achievements: "[]",
 };
 
+let errorMessage = "";
+
 // Handle POST (Save)
+const xpSchema = z.object({
+    company: z.string().min(2, "Informe a empresa."),
+    role: z.string().min(2, "Informe o cargo."),
+    start_date: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/u, "Data inicial inválida."),
+    end_date: z
+        .string()
+        .regex(/^$|^\d{4}-\d{2}-\d{2}$/u, "Data final inválida."),
+    description: z.string().min(10, "Descrição muito curta."),
+    achievements: z.string().optional().default(""),
+    password: z.string().min(8, "Senha obrigatória."),
+});
+
 if (Astro.request.method === "POST") {
     try {
+        await ensureAdminTables(env);
+        await ensureCoreTables(env);
         const formData = await Astro.request.formData();
-        const company = formData.get("company");
-        const role = formData.get("role");
-        const start_date = formData.get("start_date");
-        const end_date = formData.get("end_date");
-        const description = formData.get("description");
-        // Convert multiline achievements text to JSON array
-        const achievementsText = formData.get("achievements") as string;
-        const achievements = JSON.stringify(
-            achievementsText.split("\n").filter((line) => line.trim() !== ""),
-        );
+        const parsed = xpSchema.safeParse({
+            company: formData.get("company"),
+            role: formData.get("role"),
+            start_date: formData.get("start_date"),
+            end_date: formData.get("end_date") ?? "",
+            description: formData.get("description"),
+            achievements: formData.get("achievements") ?? "",
+            password: formData.get("password"),
+        });
 
-        if (isNew) {
-            await env.DB.prepare(
-                "INSERT INTO experiences (company, role, start_date, end_date, description, achievements) VALUES (?, ?, ?, ?, ?, ?)",
-            )
-                .bind(
-                    company,
-                    role,
-                    start_date,
-                    end_date,
-                    description,
-                    achievements,
-                )
-                .run();
+        if (!parsed.success) {
+            errorMessage = parsed.error.issues[0]?.message || "Dados inválidos.";
         } else {
-            await env.DB.prepare(
-                "UPDATE experiences SET company=?, role=?, start_date=?, end_date=?, description=?, achievements=? WHERE id=?",
-            )
-                .bind(
-                    company,
-                    role,
-                    start_date,
-                    end_date,
-                    description,
-                    achievements,
-                    id,
-                )
-                .run();
-        }
+            const { password, achievements, end_date, ...payload } = parsed.data;
 
-        return Astro.redirect("/admin/experiences");
-    } catch (e) {
+            const passwordOk = await verifyPassword(password, env);
+            if (!passwordOk) {
+                throw new Error("Senha incorreta. Somente ações autenticadas podem alterar dados.");
+            }
+
+            const achievementsJSON = JSON.stringify(
+                achievements
+                    .split("\n")
+                    .map((line) => line.trim())
+                    .filter(Boolean),
+            );
+
+            if (isNew) {
+                await env.DB.prepare(
+                    "INSERT INTO experiences (company, role, start_date, end_date, description, achievements) VALUES (?, ?, ?, ?, ?, ?)",
+                )
+                    .bind(
+                        payload.company,
+                        payload.role,
+                        payload.start_date,
+                        end_date || null,
+                        payload.description,
+                        achievementsJSON,
+                    )
+                    .run();
+            } else {
+                await env.DB.prepare(
+                    "UPDATE experiences SET company=?, role=?, start_date=?, end_date=?, description=?, achievements=? WHERE id=?",
+                )
+                    .bind(
+                        payload.company,
+                        payload.role,
+                        payload.start_date,
+                        end_date || null,
+                        payload.description,
+                        achievementsJSON,
+                        id,
+                    )
+                    .run();
+            }
+
+            return Astro.redirect("/admin/experiences");
+        }
+    } catch (e: any) {
         console.error(e);
+        errorMessage = errorMessage || e?.message || "Erro ao salvar experiência.";
     }
 }
 
 // Initial Data Fetch (Edit Mode)
 if (!isNew && Astro.request.method === "GET") {
+    await ensureCoreTables(env);
     const result = await env.DB.prepare(
         "SELECT * FROM experiences WHERE id = ?",
     )
@@ -87,7 +127,13 @@ const achievementsLines = xp.achievements
         {isNew ? "Nova Experiência" : "Editar Experiência"}
     </h1>
 
-    <form method="POST" class="max-w-3xl space-y-6">
+    {errorMessage && (
+        <div class="mb-4 rounded-lg border border-red-500/60 bg-red-500/10 text-red-200 px-4 py-3 text-sm">
+            {errorMessage}
+        </div>
+    )}
+
+    <form method="POST" class="max-w-3xl space-y-6" data-require-auth>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
                 <label class="block text-sm font-medium mb-1">Empresa</label>

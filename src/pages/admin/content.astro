@@ -1,5 +1,8 @@
 ---
+import { z } from "zod";
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import { ensureAdminTables, verifyPassword } from "../../utils/auth";
+import { ensureCoreTables } from "../../utils/db";
 
 const runtime = Astro.locals.runtime;
 const env = runtime?.env;
@@ -17,11 +20,19 @@ const defaults = {
     hero_image_key: "",
 };
 
+const contentSchema = z.object({
+    hero_title: z.string().min(3, "Título muito curto."),
+    hero_subtitle: z.string().min(10, "Subtítulo muito curto."),
+    hero_cta_experience: z.string().min(2, "CTA inválido."),
+    hero_cta_certifications: z.string().min(2, "CTA inválido."),
+    password: z.string().min(8, "Senha obrigatória."),
+});
+
+let errorMessage = "";
+
 async function loadContent() {
     if (env?.DB) {
-        await env.DB.prepare(
-            "CREATE TABLE IF NOT EXISTS site_content (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
-        ).run();
+        await ensureCoreTables(env);
     }
 
     if (!env?.DB) return defaults;
@@ -36,32 +47,47 @@ async function loadContent() {
 }
 
 if (Astro.request.method === "POST" && env?.DB) {
-    await env.DB.prepare(
-        "CREATE TABLE IF NOT EXISTS site_content (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
-    ).run();
+    try {
+        await ensureAdminTables(env);
+        await ensureCoreTables(env);
+        const data = await Astro.request.formData();
+        const parsed = contentSchema.safeParse({
+            hero_title: data.get("hero_title"),
+            hero_subtitle: data.get("hero_subtitle"),
+            hero_cta_experience: data.get("hero_cta_experience"),
+            hero_cta_certifications: data.get("hero_cta_certifications"),
+            password: data.get("password"),
+        });
 
-    const data = await Astro.request.formData();
-    const entries: [string, string][] = [
-        ["hero_title", String(data.get("hero_title") || defaults.hero_title)],
-        ["hero_subtitle", String(data.get("hero_subtitle") || defaults.hero_subtitle)],
-        [
-            "hero_cta_experience",
-            String(data.get("hero_cta_experience") || defaults.hero_cta_experience),
-        ],
-        [
-            "hero_cta_certifications",
-            String(data.get("hero_cta_certifications") || defaults.hero_cta_certifications),
-        ],
-    ];
+        if (!parsed.success) {
+            errorMessage = parsed.error.issues[0]?.message || "Dados inválidos.";
+        } else {
+            const { password, ...payload } = parsed.data;
+            const passwordOk = await verifyPassword(password, env);
+            if (!passwordOk) {
+                throw new Error("Senha incorreta. Somente ações autenticadas podem salvar alterações.");
+            }
 
-    for (const [key, value] of entries) {
-        await env.DB.prepare(
-            "INSERT OR REPLACE INTO site_content (key, value) VALUES (?, ?)",
-        )
-            .bind(key, value)
-            .run();
+            const entries: [string, string][] = [
+                ["hero_title", payload.hero_title],
+                ["hero_subtitle", payload.hero_subtitle],
+                ["hero_cta_experience", payload.hero_cta_experience],
+                ["hero_cta_certifications", payload.hero_cta_certifications],
+            ];
+
+            for (const [key, value] of entries) {
+                await env.DB.prepare(
+                    "INSERT OR REPLACE INTO site_content (key, value) VALUES (?, ?)",
+                )
+                    .bind(key, value)
+                    .run();
+            }
+            return Astro.redirect("/admin/content?saved=1");
+        }
+    } catch (e: any) {
+        console.error(e);
+        errorMessage = errorMessage || e?.message || "Erro ao salvar textos.";
     }
-    return Astro.redirect("/admin/content?saved=1");
 }
 
 const content = await loadContent();
@@ -88,7 +114,13 @@ const content = await loadContent();
         </div>
     )}
 
-    <form method="POST" class="space-y-6 max-w-3xl">
+    {errorMessage && (
+        <div class="mb-6 rounded-lg border border-red-700 bg-red-900/40 text-red-200 p-4">
+            {errorMessage}
+        </div>
+    )}
+
+    <form method="POST" class="space-y-6 max-w-3xl" data-require-auth>
         <div>
             <label class="block text-sm font-medium mb-1" for="hero_title">Título do Hero</label>
             <input
@@ -166,6 +198,7 @@ const content = await loadContent();
             action="/admin/hero-image"
             enctype="multipart/form-data"
             class="space-y-3"
+            data-require-auth
         >
             <label class="block text-sm font-medium" for="hero-image-input">Upload de nova imagem (.webp, até 2MB)</label>
             <input
