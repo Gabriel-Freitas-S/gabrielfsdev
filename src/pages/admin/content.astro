@@ -1,0 +1,184 @@
+---
+import AdminLayout from "../../layouts/AdminLayout.astro";
+
+const runtime = Astro.locals.runtime;
+const env = runtime?.env;
+const url = new URL(Astro.request.url);
+const saved = url.searchParams.get("saved") === "1";
+const savedImg = url.searchParams.get("img") === "1";
+const hasR2 = Boolean(env?.R2);
+
+const defaults = {
+    hero_title: "Desenvolvedor Full Stack",
+    hero_subtitle:
+        "Especialista em criar soluções modernas, escaláveis e esteticamente agradáveis. Focando agora em infraestrutura Cloudflare e experiência do usuário.",
+    hero_cta_experience: "Ver Experiência",
+    hero_cta_certifications: "Certificações",
+    hero_image_key: "",
+};
+
+async function loadContent() {
+    if (env?.DB) {
+        await env.DB.prepare(
+            "CREATE TABLE IF NOT EXISTS site_content (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+        ).run();
+    }
+
+    if (!env?.DB) return defaults;
+    const { results } = await env.DB.prepare(
+        "SELECT key, value FROM site_content WHERE key IN ('hero_title','hero_subtitle','hero_cta_experience','hero_cta_certifications','hero_image_key')",
+    ).all();
+    const map: Record<string, string> = {};
+    results?.forEach((row: any) => {
+        map[row.key] = row.value;
+    });
+    return { ...defaults, ...map };
+}
+
+if (Astro.request.method === "POST" && env?.DB) {
+    await env.DB.prepare(
+        "CREATE TABLE IF NOT EXISTS site_content (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    ).run();
+
+    const data = await Astro.request.formData();
+    const entries: [string, string][] = [
+        ["hero_title", String(data.get("hero_title") || defaults.hero_title)],
+        ["hero_subtitle", String(data.get("hero_subtitle") || defaults.hero_subtitle)],
+        [
+            "hero_cta_experience",
+            String(data.get("hero_cta_experience") || defaults.hero_cta_experience),
+        ],
+        [
+            "hero_cta_certifications",
+            String(data.get("hero_cta_certifications") || defaults.hero_cta_certifications),
+        ],
+    ];
+
+    for (const [key, value] of entries) {
+        await env.DB.prepare(
+            "INSERT OR REPLACE INTO site_content (key, value) VALUES (?, ?)",
+        )
+            .bind(key, value)
+            .run();
+    }
+    return Astro.redirect("/admin/content?saved=1");
+}
+
+const content = await loadContent();
+---
+
+<AdminLayout title="Textos do Site">
+    <h1 class="text-3xl font-bold mb-8">Textos do Site</h1>
+
+    {env?.DB ? null : (
+        <div class="mb-6 rounded-lg border border-yellow-700 bg-yellow-900/40 text-yellow-200 p-4">
+            Conecte o D1 para salvar alterações. Por enquanto, os valores padrão serão usados.
+        </div>
+    )}
+
+    {saved && (
+        <div class="mb-6 rounded-lg border border-green-700 bg-green-900/40 text-green-200 p-4">
+            Textos salvos com sucesso.
+        </div>
+    )}
+
+    {savedImg && (
+        <div class="mb-6 rounded-lg border border-green-700 bg-green-900/40 text-green-200 p-4">
+            Imagem do hero atualizada com sucesso.
+        </div>
+    )}
+
+    <form method="POST" class="space-y-6 max-w-3xl">
+        <div>
+            <label class="block text-sm font-medium mb-1" for="hero_title">Título do Hero</label>
+            <input
+                type="text"
+                name="hero_title"
+                id="hero_title"
+                value={content.hero_title}
+                class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+                required
+            />
+        </div>
+        <div>
+            <label class="block text-sm font-medium mb-1" for="hero_subtitle">Subtítulo do Hero</label>
+            <textarea
+                name="hero_subtitle"
+                id="hero_subtitle"
+                rows="3"
+                class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+                required
+            >{content.hero_subtitle}</textarea>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-sm font-medium mb-1" for="hero_cta_experience">Texto CTA Experiência</label>
+                <input
+                    type="text"
+                    name="hero_cta_experience"
+                    id="hero_cta_experience"
+                    value={content.hero_cta_experience}
+                    class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+                    required
+                />
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1" for="hero_cta_certifications">Texto CTA Certificações</label>
+                <input
+                    type="text"
+                    name="hero_cta_certifications"
+                    id="hero_cta_certifications"
+                    value={content.hero_cta_certifications}
+                    class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+                    required
+                />
+            </div>
+        </div>
+        <button class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded font-bold transition">
+            Salvar
+        </button>
+    </form>
+
+    <div class="mt-10 space-y-4 max-w-3xl">
+        <h2 class="text-xl font-semibold">Imagem do Hero (somente .webp)</h2>
+        {!hasR2 && (
+            <div class="rounded-lg border border-yellow-700 bg-yellow-900/40 text-yellow-200 p-4">
+                Configure o binding R2 no wrangler.toml para permitir upload da imagem.
+            </div>
+        )}
+
+        {content.hero_image_key && hasR2 ? (
+            <div class="flex flex-col gap-3">
+                <span class="text-sm text-slate-400">Prévia atual</span>
+                <img
+                    src={`/uploads/${content.hero_image_key}`}
+                    alt="Hero atual"
+                    class="max-w-full rounded-lg border border-slate-700"
+                    loading="lazy"
+                />
+            </div>
+        ) : (
+            <p class="text-slate-400 text-sm">Nenhuma imagem definida.</p>
+        )}
+
+        <form
+            method="POST"
+            action="/admin/hero-image"
+            enctype="multipart/form-data"
+            class="space-y-3"
+        >
+            <label class="block text-sm font-medium" for="hero-image-input">Upload de nova imagem (.webp, até 2MB)</label>
+            <input
+                type="file"
+                name="image"
+                accept="image/webp"
+                required
+                id="hero-image-input"
+                class="block w-full text-sm bg-slate-800 border border-slate-700 rounded p-2 cursor-pointer"
+            />
+            <button class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded font-bold transition">
+                Enviar imagem
+            </button>
+        </form>
+    </div>
+</AdminLayout>

@@ -1,0 +1,66 @@
+---
+import AdminLayout from "../../layouts/AdminLayout.astro";
+
+const runtime = Astro.locals.runtime;
+const env = runtime?.env;
+
+let xpCount = 0;
+let certCount = 0;
+
+try {
+    if (env?.DB) {
+        const { results: experiences } = await env.DB.prepare(
+            "SELECT COUNT(*) as count FROM experiences",
+        ).run();
+        const { results: certifications } = await env.DB.prepare(
+            "SELECT COUNT(*) as count FROM certifications",
+        ).run();
+        xpCount = experiences?.[0]?.count ?? 0;
+        certCount = certifications?.[0]?.count ?? 0;
+    }
+} catch (e) {
+    console.error("Erro ao carregar contagens", e);
+}
+---
+
+<AdminLayout title="Dashboard">
+    <h1 class="text-3xl font-bold mb-8">Dashboard</h1>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <a
+            href="/admin/experiences"
+            class="bg-slate-800 p-6 rounded-xl border border-slate-700 hover:border-blue-500 transition group"
+        >
+            <h3 class="text-xl font-semibold text-slate-400">Experiências</h3>
+            <p class="text-4xl font-bold mt-2 text-blue-400">{xpCount}</p>
+            <span
+                class="text-sm text-slate-500 group-hover:text-blue-300 mt-4 block"
+                >Gerenciar &rarr;</span
+            >
+        </a>
+
+        <a
+            href="/admin/certifications"
+            class="bg-slate-800 p-6 rounded-xl border border-slate-700 hover:border-purple-500 transition group"
+        >
+            <h3 class="text-xl font-semibold text-slate-400">Certificações</h3>
+            <p class="text-4xl font-bold mt-2 text-purple-400">{certCount}</p>
+            <span
+                class="text-sm text-slate-500 group-hover:text-purple-300 mt-4 block"
+                >Gerenciar &rarr;</span
+            >
+        </a>
+
+        <a
+            href="/admin/content"
+            class="bg-slate-800 p-6 rounded-xl border border-slate-700 hover:border-green-500 transition group"
+        >
+            <h3 class="text-xl font-semibold text-slate-400">Textos</h3>
+            <p class="text-4xl font-bold mt-2 text-green-400">Hero</p>
+            <span
+                class="text-sm text-slate-500 group-hover:text-green-300 mt-4 block"
+                >Editar &rarr;</span
+            >
+        </a>
+    </div>
+</AdminLayout>

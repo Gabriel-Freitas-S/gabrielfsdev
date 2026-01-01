@@ -1,0 +1,174 @@
+---
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+
+const { id } = Astro.params;
+const isNew = id === "new";
+
+const { env } = Astro.locals.runtime;
+let xp = {
+    company: "",
+    role: "",
+    start_date: "",
+    end_date: "",
+    description: "",
+    achievements: "[]",
+};
+
+// Handle POST (Save)
+if (Astro.request.method === "POST") {
+    try {
+        const formData = await Astro.request.formData();
+        const company = formData.get("company");
+        const role = formData.get("role");
+        const start_date = formData.get("start_date");
+        const end_date = formData.get("end_date");
+        const description = formData.get("description");
+        // Convert multiline achievements text to JSON array
+        const achievementsText = formData.get("achievements") as string;
+        const achievements = JSON.stringify(
+            achievementsText.split("\n").filter((line) => line.trim() !== ""),
+        );
+
+        if (isNew) {
+            await env.DB.prepare(
+                "INSERT INTO experiences (company, role, start_date, end_date, description, achievements) VALUES (?, ?, ?, ?, ?, ?)",
+            )
+                .bind(
+                    company,
+                    role,
+                    start_date,
+                    end_date,
+                    description,
+                    achievements,
+                )
+                .run();
+        } else {
+            await env.DB.prepare(
+                "UPDATE experiences SET company=?, role=?, start_date=?, end_date=?, description=?, achievements=? WHERE id=?",
+            )
+                .bind(
+                    company,
+                    role,
+                    start_date,
+                    end_date,
+                    description,
+                    achievements,
+                    id,
+                )
+                .run();
+        }
+
+        return Astro.redirect("/admin/experiences");
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+// Initial Data Fetch (Edit Mode)
+if (!isNew && Astro.request.method === "GET") {
+    const result = await env.DB.prepare(
+        "SELECT * FROM experiences WHERE id = ?",
+    )
+        .bind(id)
+        .first();
+    if (result) {
+        xp = result as any;
+    }
+}
+
+// Format achievements for textarea (JSON to lines)
+const achievementsLines = xp.achievements
+    ? JSON.parse(xp.achievements as string).join("\n")
+    : "";
+---
+
+<AdminLayout title={isNew ? "Nova Experiência" : "Editar Experiência"}>
+    <h1 class="text-3xl font-bold mb-8">
+        {isNew ? "Nova Experiência" : "Editar Experiência"}
+    </h1>
+
+    <form method="POST" class="max-w-3xl space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-sm font-medium mb-1">Empresa</label>
+                <input
+                    type="text"
+                    name="company"
+                    value={xp.company}
+                    required
+                    class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+                />
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">Cargo</label>
+                <input
+                    type="text"
+                    name="role"
+                    value={xp.role}
+                    required
+                    class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+                />
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-sm font-medium mb-1">Data Início</label
+                >
+                <input
+                    type="date"
+                    name="start_date"
+                    value={xp.start_date}
+                    required
+                    class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+                />
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1"
+                    >Data Fim (Deixe em branco se atual)</label
+                >
+                <input
+                    type="date"
+                    name="end_date"
+                    value={xp.end_date}
+                    class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+                />
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium mb-1">Descrição</label>
+            <textarea
+                name="description"
+                rows="4"
+                required
+                class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+                >{xp.description}</textarea
+            >
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium mb-1"
+                >Conquistas (uma por linha)</label
+            >
+            <textarea
+                name="achievements"
+                rows="4"
+                class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+                >{achievementsLines}</textarea
+            >
+        </div>
+
+        <div class="flex gap-4 pt-4">
+            <button
+                class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded font-bold transition"
+                >Salvar</button
+            >
+            <a
+                href="/admin/experiences"
+                class="bg-slate-700 hover:bg-slate-600 px-6 py-2 rounded font-bold transition"
+                >Cancelar</a
+            >
+        </div>
+    </form>
+</AdminLayout>

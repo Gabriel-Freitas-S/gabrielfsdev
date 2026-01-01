@@ -1,0 +1,99 @@
+---
+import Layout from "../../layouts/Layout.astro";
+const { createHash } = await import("node:crypto");
+
+async function ensureSettings(env: any) {
+    if (!env?.DB) return;
+    await env.DB.prepare(
+        "CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    ).run();
+}
+
+async function getStoredHash(env: any) {
+    if (!env?.DB) return null;
+    const { results } = await env.DB.prepare(
+        "SELECT value FROM admin_settings WHERE key = 'admin_password' LIMIT 1",
+    ).all();
+    return results?.[0]?.value || null;
+}
+
+const runtime = Astro.locals.runtime;
+const env = runtime?.env;
+
+let error = false;
+let missingPassword = false;
+
+if (Astro.request.method === "POST") {
+    try {
+        await ensureSettings(env);
+        const data = await Astro.request.formData();
+        const password = data.get("password");
+
+        const envPassword = env?.ADMIN_PASSWORD;
+        const storedHash = await getStoredHash(env);
+
+        if (!storedHash && !envPassword) {
+            missingPassword = true;
+            throw new Error("No admin password configured");
+        }
+
+        const hash = (value: string) =>
+            createHash("sha256").update(value).digest("hex");
+
+        const isValid = storedHash
+            ? hash(String(password)) === storedHash
+            : String(password) === envPassword;
+
+        if (isValid) {
+            Astro.cookies.set("admin_session", "true", {
+                path: "/",
+                httpOnly: true,
+                secure: Astro.request.url.startsWith("https"),
+                sameSite: "Lax",
+                maxAge: 60 * 60 * 24, // 1 day
+            });
+            return Astro.redirect("/admin/dashboard");
+        }
+
+        error = true;
+    } catch (e) {
+        console.error(e);
+        error = true;
+    }
+}
+---
+
+<Layout title="Admin Login">
+    <div class="flex min-h-screen items-center justify-center px-4">
+        <div class="card p-8 w-full max-w-md">
+            <h1 class="text-2xl font-bold mb-6 text-center">
+                Login Administrativo
+            </h1>
+
+            {error && (
+                <div class="mb-4 rounded-lg border border-red-500/60 bg-red-500/10 text-red-200 px-4 py-3 text-sm">
+                    {missingPassword
+                        ? "Senha não configurada. Defina ADMIN_PASSWORD no ambiente ou cadastre uma pelo dashboard."
+                        : "Senha inválida. Tente novamente."}
+                </div>
+            )}
+
+            <form method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1" for="admin_password">Senha</label>
+                    <input
+                        type="password"
+                        name="password"
+                        id="admin_password"
+                        required
+                        autofocus
+                        class="w-full surface rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+                    />
+                </div>
+                <button class="w-full btn btn-primary justify-center">
+                    Entrar
+                </button>
+            </form>
+        </div>
+    </div>
+</Layout>

@@ -1,0 +1,142 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { legacyCertifications } from "../data/legacy";
+
+let groupedCerts = {};
+const runtime = Astro.locals.runtime;
+const env = runtime?.env;
+
+try {
+    if (env?.DB) {
+        const { results } = await env.DB.prepare(
+            "SELECT * FROM certifications ORDER BY date DESC",
+        ).run();
+
+        // Group by group_name; if DB empty, fall back to legacy
+        const source = results.length ? results : legacyCertifications;
+        groupedCerts = source.reduce((acc: any, cert: any) => {
+            const group = cert.group_name || "Outros";
+            if (!acc[group]) acc[group] = { name: group, hours: 0, items: [] };
+            acc[group].items.push(cert);
+            acc[group].hours += cert.hours || 0;
+            return acc;
+        }, {});
+    } else {
+        groupedCerts = legacyCertifications.reduce((acc: any, cert: any) => {
+            const group = cert.group_name || "Outros";
+            if (!acc[group]) acc[group] = { name: group, hours: 0, items: [] };
+            acc[group].items.push(cert);
+            acc[group].hours += cert.hours || 0;
+            return acc;
+        }, {});
+    }
+} catch (e) {
+    console.error(e);
+    groupedCerts = legacyCertifications.reduce((acc: any, cert: any) => {
+        const group = cert.group_name || "Outros";
+        if (!acc[group]) acc[group] = { name: group, hours: 0, items: [] };
+        acc[group].items.push(cert);
+        acc[group].hours += cert.hours || 0;
+        return acc;
+    }, {});
+}
+
+const groups = Object.values(groupedCerts);
+---
+
+<Layout title="Certificações - Gabriel Freitas">
+    <main class="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+        <h1 class="text-3xl sm:text-4xl font-bold mb-3 text-center">Certificações</h1>
+        <p class="text-center text-muted mb-10">Explore meus cursos e certificados.</p>
+        <div class="max-w-xl mx-auto mb-10">
+            <label class="block text-sm font-medium text-muted mb-2" for="cert-search">
+                Buscar certificações
+            </label>
+            <input
+                id="cert-search"
+                type="search"
+                placeholder="Digite título, emissor ou grupo"
+                class="w-full surface rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
+            />
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {
+                groups.map((group: any) => (
+                    <div class="card overflow-hidden hover:-translate-y-1 transition cert-card" data-group={group.name}>
+                        <div class="surface-soft p-6 border-b border-[color:var(--border)] flex justify-between items-center">
+                            <h2 class="text-lg font-bold">
+                                {group.name}
+                            </h2>
+                            <span class="badge">
+                                {group.hours}h
+                            </span>
+                        </div>
+
+                        <div class="p-6 space-y-4">
+                            <ul class="space-y-4">
+                                {group.items.map((cert: any) => (
+                                    <li class="border-b border-[color:var(--border)]/60 pb-3 last:border-0 last:pb-0 cert-item" data-title={cert.title} data-issuer={cert.issuer} data-group={group.name}>
+                                        <h3 class="font-semibold">
+                                            {cert.title}
+                                        </h3>
+                                        <div class="flex flex-wrap justify-between gap-2 text-xs text-muted mt-1">
+                                            <span>{cert.issuer}</span>
+                                            <span>{new Date(cert.date).toLocaleDateString()}</span>
+                                        </div>
+                                        {cert.url && (
+                                            <a
+                                                href={cert.url}
+                                                target="_blank"
+                                                class="block mt-2 text-xs text-[color:var(--accent)] hover:underline"
+                                            >
+                                                Ver credencial ↗
+                                            </a>
+                                        )}
+
+                                <script>
+                                const input = document.getElementById('cert-search');
+                                const items = Array.from(document.querySelectorAll('.cert-item'));
+
+                                function filter(term) {
+                                    const query = term.trim().toLowerCase();
+                                    items.forEach((item) => {
+                                        const title = item.dataset.title?.toLowerCase() || '';
+                                        const issuer = item.dataset.issuer?.toLowerCase() || '';
+                                        const group = item.dataset.group?.toLowerCase() || '';
+                                        const match = !query || title.includes(query) || issuer.includes(query) || group.includes(query);
+                                        item.classList.toggle('hidden', !match);
+                                    });
+
+                                    // Hide cards with no visible items
+                                    document.querySelectorAll('.cert-card').forEach((card) => {
+                                        const visible = card.querySelectorAll('.cert-item:not(.hidden)').length > 0;
+                                        card.classList.toggle('hidden', !visible);
+                                    });
+                                }
+
+                                input?.addEventListener('input', (e) => {
+                                    filter((e.target as HTMLInputElement).value || '');
+                                });
+
+                                document.addEventListener('astro:page-load', () => filter(''));
+                                document.addEventListener('astro:after-swap', () => filter(input?.value || ''));
+                                </script>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+                ))
+            }
+
+            {
+                groups.length === 0 && (
+                    <div class="col-span-full text-center py-20 text-muted">
+                        Nenhuma certificação encontrada.
+                    </div>
+                )
+            }
+        </div>
+    </main>
+</Layout>

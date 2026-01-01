@@ -1,0 +1,99 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { legacyExperiences } from "../data/legacy";
+
+let experiences = [];
+const runtime = Astro.locals.runtime;
+const env = runtime?.env;
+
+try {
+    if (env?.DB) {
+        const { results } = await env.DB.prepare(
+            "SELECT * FROM experiences ORDER BY start_date DESC",
+        ).run();
+        const source = results.length ? results : legacyExperiences;
+        experiences = source.map((xp: any) => ({
+            ...xp,
+            achievements: xp.achievements ?? JSON.stringify(xp.achievements ?? []),
+        }));
+    } else {
+        // Fallback with legacy data for local/dev when DB is not available
+        experiences = legacyExperiences.map((xp) => ({
+            ...xp,
+            achievements: JSON.stringify(xp.achievements),
+        }));
+    }
+} catch (e) {
+    console.error("Error fetching experiences:", e);
+    experiences = legacyExperiences.map((xp) => ({
+        ...xp,
+        achievements: JSON.stringify(xp.achievements),
+    }));
+}
+
+function formatDate(dateStr: string) {
+    if (!dateStr) return "";
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("pt-BR", {
+        month: "short",
+        year: "numeric",
+    });
+}
+---
+
+<Layout title="Experiência Profissional - Gabriel Freitas">
+    <main class="max-w-4xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+        <h1 class="text-3xl sm:text-4xl font-bold mb-10 text-center">
+            Experiência Profissional
+        </h1>
+
+        <div class="relative border-l border-[color:var(--border)] ml-4 sm:ml-6 space-y-10">
+            {
+                experiences.map((xp: any) => (
+                    <div class="ml-10 relative">
+                        {/* Dot on timeline */}
+                        <div class="absolute -left-[3.25rem] bg-[color:var(--accent)] h-6 w-6 rounded-full border-4 border-[color:var(--bg)]" />
+
+                        <div class="card p-6 sm:p-8 hover:-translate-y-1 transition">
+                            <div class="flex flex-col md:flex-row md:justify-between md:items-baseline mb-3 sm:mb-4 gap-2">
+                                <h2 class="text-2xl font-bold">
+                                    {xp.role}
+                                </h2>
+                                <span class="text-muted font-mono text-xs sm:text-sm mt-1 md:mt-0">
+                                    {formatDate(xp.start_date)} -{" "}
+                                    {xp.end_date
+                                        ? formatDate(xp.end_date)
+                                        : "Presente"}
+                                </span>
+                            </div>
+
+                            <h3 class="text-xl text-[color:var(--accent)] font-semibold mb-3">
+                                {xp.company}
+                            </h3>
+
+                            <p class="text-base text-muted leading-relaxed mb-5 whitespace-pre-wrap">
+                                {xp.description}
+                            </p>
+
+                            {xp.achievements &&
+                                JSON.parse(xp.achievements).length > 0 && (
+                                    <div class="surface-soft p-4 rounded-lg">
+                                        <h4 class="text-sm font-bold text-muted uppercase tracking-wider mb-2">
+                                            Principais Conquistas
+                                        </h4>
+                                        <ul class="list-disc list-inside space-y-1 text-sm">
+                                            {JSON.parse(xp.achievements).map(
+                                                (item: string) => (
+                                                    <li>{item}</li>
+                                                ),
+                                            )}
+                                        </ul>
+                                    </div>
+                                )}
+                        </div>
+                    </div>
+                ))
+            }
+        </div>
+    </main>
+</Layout>

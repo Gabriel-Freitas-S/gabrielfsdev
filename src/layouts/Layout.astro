@@ -1,0 +1,212 @@
+---
+import "../styles/global.css";
+
+interface Props {
+	title: string;
+	description?: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="description" content={description || "Portfólio de Gabriel Freitas Souza"} />
+		<meta name="viewport" content="width=device-width" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="generator" content={Astro.generator} />
+		<title>{title}</title>
+		<script is:inline>
+			(() => {
+				const stored = localStorage.getItem("theme");
+				const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+				const theme = stored || (prefersDark ? "dark" : "light");
+				document.documentElement.dataset.theme = theme;
+			})();
+		</script>
+		<style>
+			.nav-social {
+				display: flex;
+				align-items: center;
+				gap: 0.5rem;
+			}
+
+			.nav-social--stack {
+				flex-direction: column;
+				align-items: flex-start;
+				gap: 0.75rem;
+			}
+
+			.nav-social__button {
+				display: inline-flex;
+				align-items: center;
+				gap: 0.4rem;
+				padding: 0.6rem 0.9rem;
+				border-radius: 0.8rem;
+				font-weight: 600;
+				text-decoration: none;
+				color: #ffffff;
+				transition: transform 0.15s ease, opacity 0.15s ease;
+				min-height: 40px;
+				font-size: 0.9rem;
+			}
+
+			.nav-social__button:hover,
+			.nav-social__button:focus-visible {
+				transform: translateY(-1px);
+				opacity: 0.9;
+			}
+
+			.nav-social__linkedin {
+				background: #0a66c2;
+			}
+
+			.nav-social__github {
+				background: #24292f;
+			}
+
+			.nav-social__text {
+				white-space: nowrap;
+			}
+
+			@media (max-width: 768px) {
+				.nav-social,
+				.nav-social--stack {
+					flex-direction: row;
+					gap: 0.5rem;
+					justify-content: flex-start;
+				}
+
+				.nav-social__button {
+					padding: 0.55rem;
+					width: 44px;
+					height: 44px;
+					border-radius: 9999px;
+					justify-content: center;
+				}
+
+				.nav-social__text {
+					display: none;
+				}
+			}
+
+			@media (max-width: 360px) {
+				.nav-social__text {
+					display: none;
+				}
+
+				.nav-social__button {
+					justify-content: center;
+					min-width: 44px;
+				}
+			}
+
+			@media (prefers-reduced-motion: reduce) {
+				.nav-social__button {
+					transition: none;
+				}
+			}
+		</style>
+	</head>
+	<body class="min-h-screen antialiased">
+		<a href="#main-content" class="skip-link">Pular para o conteúdo principal</a>
+		<header class="sticky top-0 z-50 glass border-b border-[color:var(--border)]">
+			<div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+				<a href="/" class="text-xl font-extrabold tracking-tight" aria-label="Ir para início">
+					<span class="text-[color:var(--accent)]">Gabriel</span>FS.dev
+				</a>
+				<nav id="main-nav" class="hidden md:flex items-center gap-6 text-sm font-medium text-muted">
+					<a href="/" class="hover:text-[color:var(--text)] transition">Início</a>
+					<a href="/experiencia" class="hover:text-[color:var(--text)] transition">Experiência</a>
+					<a href="/certificacoes" class="hover:text-[color:var(--text)] transition">Certificações</a>
+				</nav>
+				<div class="flex items-center gap-3">
+					<div class="hidden sm:flex nav-social" role="group" aria-label="Perfis sociais">
+						<a
+							href="https://www.linkedin.com/in/gabrielfsdev"
+							class="nav-social__button nav-social__linkedin"
+							target="_blank"
+							rel="noreferrer noopener"
+							aria-label="Perfil no LinkedIn"
+						>
+							<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+								<path d="M4.983 3.5C4.983 4.881 3.88 6 2.5 6S0 4.881 0 3.5 1.103 1 2.483 1 4.983 2.119 4.983 3.5zM.284 8.5h4.398V23H.284zM8.63 8.5h4.213v1.98h.06c.587-1.11 2.022-2.28 4.163-2.28 4.457 0 5.276 2.94 5.276 6.766V23h-4.4v-6.26c0-1.493-.027-3.415-2.08-3.415-2.08 0-2.398 1.625-2.398 3.303V23h-4.4z" />
+							</svg>
+							<span class="nav-social__text">LinkedIn</span>
+						</a>
+						<a
+							href="https://github.com/Gabriel-Freitas-S"
+							class="nav-social__button nav-social__github"
+							target="_blank"
+							rel="noreferrer noopener"
+							aria-label="Perfil no GitHub"
+						>
+							<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+								<path d="M12 .5C5.648.5.5 5.648.5 12c0 5.088 3.292 9.395 7.862 10.915.574.106.783-.25.783-.556 0-.274-.01-1.178-.016-2.138-3.197.695-3.873-1.35-3.873-1.35-.523-1.33-1.277-1.684-1.277-1.684-1.044-.714.079-.7.079-.7 1.155.081 1.763 1.187 1.763 1.187 1.027 1.76 2.695 1.252 3.35.957.104-.744.402-1.253.732-1.54-2.553-.29-5.237-1.276-5.237-5.68 0-1.255.448-2.28 1.184-3.084-.12-.289-.512-1.454.112-3.033 0 0 .967-.31 3.168 1.177a11.06 11.06 0 0 1 2.882-.388c.976.005 1.959.132 2.882.388 2.2-1.487 3.165-1.177 3.165-1.177.625 1.579.233 2.744.114 3.033.737.804 1.183 1.829 1.183 3.084 0 4.416-2.689 5.386-5.253 5.67.414.355.783 1.054.783 2.124 0 1.535-.014 2.773-.014 3.15 0 .31.207.669.79.556C20.712 21.392 24 17.084 24 12 24 5.648 18.852.5 12 .5z" />
+							</svg>
+							<span class="nav-social__text">GitHub</span>
+						</a>
+					</div>
+					<button
+						id="theme-toggle"
+						class="btn btn-ghost h-10 w-10 p-2"
+						aria-label="Alternar tema"
+						aria-pressed="false"
+					>
+						<span id="theme-icon" aria-hidden="true">☀️</span>
+					</button>
+					<button
+						id="menu-toggle"
+						class="md:hidden btn btn-ghost h-10 w-10 p-2"
+						aria-label="Abrir menu"
+						aria-expanded="false"
+						aria-controls="mobile-menu"
+					>
+						☰
+					</button>
+				</div>
+			</div>
+			<div id="mobile-menu" class="md:hidden hidden border-t border-[color:var(--border)] px-4 pb-4">
+				<nav class="flex flex-col gap-3 text-sm font-medium text-muted pt-3">
+					<a href="/" class="hover:text-[color:var(--text)] transition">Início</a>
+					<a href="/experiencia" class="hover:text-[color:var(--text)] transition">Experiência</a>
+					<a href="/certificacoes" class="hover:text-[color:var(--text)] transition">Certificações</a>
+				</nav>
+			</div>
+		</header>
+		<main id="main-content">
+			<slot />
+		</main>
+		<script is:inline>
+			(() => {
+				const html = document.documentElement;
+				const btn = document.getElementById("theme-toggle");
+				const icon = document.getElementById("theme-icon");
+				const menuBtn = document.getElementById("menu-toggle");
+				const mobileMenu = document.getElementById("mobile-menu");
+
+				const applyIcon = () => {
+					const isDark = html.dataset.theme === "dark";
+					icon.textContent = isDark ? "🌙" : "☀️";
+					btn?.setAttribute("aria-pressed", String(isDark));
+				};
+
+				btn?.addEventListener("click", () => {
+					const next = html.dataset.theme === "dark" ? "light" : "dark";
+					html.dataset.theme = next;
+					localStorage.setItem("theme", next);
+					applyIcon();
+				});
+				applyIcon();
+
+				menuBtn?.addEventListener("click", () => {
+					const isOpen = mobileMenu?.classList.contains("hidden") === false;
+					mobileMenu?.classList.toggle("hidden", isOpen);
+					menuBtn.setAttribute("aria-expanded", String(!isOpen));
+				});
+			})();
+		</script>
+	</body>
+</html>

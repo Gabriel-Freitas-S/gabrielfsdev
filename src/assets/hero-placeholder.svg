@@ -1,0 +1,17 @@
+<svg width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Placeholder da imagem principal</title>
+  <desc id="desc">Fundo em gradiente com contorno sutil para representar uma imagem de perfil.</desc>
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1d2b50" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" rx="32" fill="url(#grad)" />
+  <rect x="180" y="80" width="440" height="440" rx="220" fill="rgba(255,255,255,0.05)" />
+  <rect x="200" y="120" width="400" height="360" rx="200" fill="rgba(255,255,255,0.08)" />
+  <path d="M320 260c0-60 40-100 80-100s80 40 80 100-40 90-80 90-80-30-80-90z" fill="#1f2937" opacity="0.9" />
+  <path d="M260 420c20-40 80-70 140-70s120 30 140 70v60H260z" fill="#1f2937" opacity="0.9" />
+  <circle cx="360" cy="240" r="18" fill="#0f172a" />
+  <circle cx="440" cy="240" r="18" fill="#0f172a" />
+</svg>

@@ -1,0 +1,117 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { Image } from "astro:assets";
+import heroPlaceholder from "../assets/hero-placeholder.svg";
+
+const runtime = Astro.locals.runtime;
+const env = runtime?.env;
+const hasR2 = Boolean(env?.R2);
+
+const defaults = {
+	hero_title: "Desenvolvedor Full Stack",
+	hero_subtitle:
+		"Especialista em criar soluções modernas, escaláveis e esteticamente agradáveis. Focando agora em infraestrutura Cloudflare e experiência do usuário.",
+	hero_cta_experience: "Ver Experiência",
+	hero_cta_certifications: "Certificações",
+	hero_image_key: "",
+};
+
+let content = defaults;
+
+try {
+	if (env?.DB) {
+		const rows = await env.DB.prepare(
+			"SELECT key, value FROM site_content WHERE key IN ('hero_title','hero_subtitle','hero_cta_experience','hero_cta_certifications','hero_image_key')",
+		).all();
+		const map: Record<string, string> = {};
+		rows?.results?.forEach((row: any) => {
+			if (row?.key) map[row.key] = row.value;
+		});
+		content = { ...defaults, ...map };
+	}
+} catch (e) {
+	console.error("Erro ao carregar conteúdo", e);
+}
+
+	const heroImageSrc =
+		content.hero_image_key && hasR2
+			? `/uploads/${content.hero_image_key}`
+			: heroPlaceholder;
+---
+
+<Layout title="GabrielFS.dev" description={content.hero_subtitle}>
+	<main>
+		{/* Hero Section */}
+		<section class="min-h-[80vh] flex flex-col justify-center items-center text-center px-4 hero-bg">
+			<div class="max-w-6xl w-full flex flex-col gap-10 md:grid md:grid-cols-[1.1fr_0.9fr] items-center">
+				<div class="max-w-3xl space-y-6 animate-fade-in-up mx-auto order-2 md:order-1">
+					<h1 class="text-5xl md:text-6xl font-black tracking-tight">
+						{content.hero_title}
+					</h1>
+					<p class="text-lg md:text-xl text-muted max-w-2xl mx-auto leading-relaxed">
+						{content.hero_subtitle}
+					</p>
+
+					<div class="cta-group">
+						<div class="cta-buttons">
+							<a href="/experiencia" class="btn btn-primary px-6 md:px-8">
+								{content.hero_cta_experience}
+							</a>
+							<a href="/certificacoes" class="btn btn-ghost px-6 md:px-8">
+								{content.hero_cta_certifications}
+							</a>
+						</div>
+					</div>
+
+				</div>
+
+				<div class="w-full max-w-xl mx-auto order-1 md:order-2">
+					<div class="relative overflow-hidden rounded-3xl border border-[color:var(--border)] shadow-2xl">
+						<Image
+							src={heroImageSrc}
+							alt="Foto principal"
+							class="w-full h-full object-cover"
+							loading="eager"
+							decoding="async"
+							fetchpriority="high"
+							width={800}
+							height={800}
+							sizes="(max-width: 1024px) 90vw, 480px"
+						/>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		{/* Stats Section removed: visitor counter disabled to avoid KV reload loops */}
+	</main>
+
+	<footer class="py-10 border-t border-[color:var(--border)] text-center text-muted text-sm px-4">
+		<p>
+			&copy; {new Date().getFullYear()} Gabriel Freitas Souza. Built with Astro & Cloudflare.
+		</p>
+	</footer>
+</Layout>
+
+<style>
+.cta-group {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.75rem;
+	margin-top: 1.25rem;
+}
+
+.cta-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	justify-content: center;
+}
+
+@media (min-width: 768px) {
+	.cta-group {
+		margin-top: 1.5rem;
+	}
+}
+</style>
