@@ -3,7 +3,18 @@
 		"Astro Docs": {
 			"url": "https://mcp.docs.astro.build/mcp",
 			"type": "http"
+		},
+		"Cloudflare Docs": {
+			"url": "https://docs.mcp.cloudflare.com/mcp",
+			"type": "http"
 		}
+		,
+		"Cloudflare Workers Bindings": {
+			"url": "https://bindings.mcp.cloudflare.com/mcp",
+			"type": "http"
+		}
+		
 	},
+
 	"inputs": []
 }
