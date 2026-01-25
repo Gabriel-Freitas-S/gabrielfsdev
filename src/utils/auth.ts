@@ -2,8 +2,8 @@ const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 export const SESSION_COOKIE = "admin_session";
 export const SESSION_MAX_INACTIVITY_MS = 1000 * 60 * 60 * 24 * 2; // 2 days
 
-// PBKDF2 configuration (OWASP recommended)
-const PBKDF2_ITERATIONS = 310000;
+// PBKDF2 configuration (Cloudflare Workers limit: max 100k iterations)
+const PBKDF2_ITERATIONS = 100000;
 const SALT_LENGTH = 16;
 
 const settingsTableSQL =
