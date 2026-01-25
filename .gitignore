@@ -34,3 +34,5 @@ pnpm-debug.log*
 
 # coverage / misc
 coverage/
+
+.dev.vars

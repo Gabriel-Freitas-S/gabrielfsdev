@@ -2,6 +2,10 @@ const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 export const SESSION_COOKIE = "admin_session";
 export const SESSION_MAX_INACTIVITY_MS = 1000 * 60 * 60 * 24 * 2; // 2 days
 
+// PBKDF2 configuration (OWASP recommended)
+const PBKDF2_ITERATIONS = 310000;
+const SALT_LENGTH = 16;
+
 const settingsTableSQL =
     "CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)";
 const sessionsTableSQL =
@@ -20,12 +24,53 @@ function requireDB(env: any) {
     if (!env?.DB) throw new Error("D1 database is required for admin auth");
 }
 
-export async function sha256Hex(value: string): Promise<string> {
+// Timing-safe comparison to prevent timing attacks
+function timingSafeEqual(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    let result = 0;
+    for (let i = 0; i < a.length; i++) {
+        result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    return result === 0;
+}
+
+// Legacy SHA-256 for migration compatibility
+async function sha256Hex(value: string): Promise<string> {
     const data = new TextEncoder().encode(value);
     const digest = await crypto.subtle.digest("SHA-256", data);
     return Array.from(new Uint8Array(digest))
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
+}
+
+// Secure password hashing with PBKDF2
+export async function hashPassword(password: string, existingSalt?: Uint8Array): Promise<string> {
+    const salt = existingSalt || crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+    const keyMaterial = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(password),
+        "PBKDF2",
+        false,
+        ["deriveBits"]
+    );
+    const derivedBits = await crypto.subtle.deriveBits(
+        { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+        keyMaterial,
+        256
+    );
+    const hashHex = Array.from(new Uint8Array(derivedBits)).map(b => b.toString(16).padStart(2, "0")).join("");
+    const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, "0")).join("");
+    return `pbkdf2:${saltHex}:${hashHex}`;
+}
+
+// Verify password against PBKDF2 hash
+async function verifyPBKDF2(password: string, storedHash: string): Promise<boolean> {
+    const parts = storedHash.split(":");
+    if (parts.length !== 3 || parts[0] !== "pbkdf2") return false;
+    const saltHex = parts[1];
+    const salt = new Uint8Array(saltHex.match(/.{2}/g)!.map(byte => parseInt(byte, 16)));
+    const newHash = await hashPassword(password, salt);
+    return timingSafeEqual(newHash, storedHash);
 }
 
 export async function ensureAdminTables(env: any) {
@@ -44,7 +89,7 @@ export async function getStoredPasswordHash(env: any): Promise<string | null> {
 
     // Bootstrap from environment once if nothing stored yet
     if (!stored && env?.ADMIN_PASSWORD) {
-        const hash = await sha256Hex(env.ADMIN_PASSWORD);
+        const hash = await hashPassword(env.ADMIN_PASSWORD);
         await savePasswordHash(env, hash);
         return hash;
     }
@@ -65,8 +110,20 @@ export async function verifyPassword(input: string, env: any): Promise<boolean> 
     const storedHash = await getStoredPasswordHash(env);
     if (!storedHash) return false;
 
-    const hashedInput = await sha256Hex(input);
-    return hashedInput === storedHash;
+    // Support PBKDF2 format (new) and legacy SHA-256 (for migration)
+    if (storedHash.startsWith("pbkdf2:")) {
+        return verifyPBKDF2(input, storedHash);
+    }
+
+    // Legacy fallback: SHA-256 comparison, then migrate to PBKDF2
+    const legacyHash = await sha256Hex(input);
+    if (timingSafeEqual(legacyHash, storedHash)) {
+        // Auto-migrate to PBKDF2 on successful login
+        const newHash = await hashPassword(input);
+        await savePasswordHash(env, newHash);
+        return true;
+    }
+    return false;
 }
 
 function cleanBase32(input: string): string {

@@ -8,21 +8,21 @@
 		--border: #1f2a44;
 		--muted: #94a3b8;
 		--text: #e2e8f0;
-		--accent: #3b82f6;
-		--accent-strong: #6366f1;
-		--glow: rgba(99, 102, 241, 0.15);
+		--accent: #0ea5e9;
+		--accent-strong: #0284c7;
+		--glow: rgba(14, 165, 233, 0.15);
 	}
 
 	:root[data-theme="light"] {
-		--bg: #f8fafc;
-		--surface: #ffffff;
-		--surface-2: #f1f5f9;
-		--border: #e2e8f0;
-		--muted: #475569;
+		--bg: #ffffff;
+		--surface: #f8fafc;
+		--surface-2: #e2e8f0;
+		--border: #cbd5e1;
+		--muted: #64748b;
 		--text: #0f172a;
-		--accent: #2563eb;
-		--accent-strong: #1d4ed8;
-		--glow: rgba(37, 99, 235, 0.12);
+		--accent: #0284c7;
+		--accent-strong: #0369a1;
+		--glow: rgba(2, 132, 199, 0.08);
 	}
 
 	body {
@@ -37,7 +37,10 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		*, *::before, *::after {
+
+		*,
+		*::before,
+		*::after {
 			animation-duration: 0.001ms !important;
 			animation-iteration-count: 1 !important;
 			transition-duration: 0.001ms !important;
@@ -121,7 +124,7 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 1rem;
-		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+		box-shadow: 0 4px 20px color-mix(in srgb, var(--text) 8%, transparent);
 	}
 
 	.glass {

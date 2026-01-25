@@ -17,14 +17,18 @@ const { title } = Astro.props;
         <script is:inline>
             (() => {
                 const stored = localStorage.getItem("theme");
-                const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+                const prefersDark = window.matchMedia(
+                    "(prefers-color-scheme: dark)",
+                ).matches;
                 const theme = stored || (prefersDark ? "dark" : "light");
                 document.documentElement.dataset.theme = theme;
             })();
         </script>
     </head>
     <body class="min-h-screen antialiased">
-        <a href="#admin-main" class="skip-link">Pular para o conteúdo principal</a>
+        <a href="#admin-main" class="skip-link"
+            >Pular para o conteúdo principal</a
+        >
         <div class="md:flex min-h-screen">
             <aside
                 id="admin-sidebar"
@@ -67,7 +71,9 @@ const { title } = Astro.props;
             </aside>
 
             <div class="flex-1 flex flex-col">
-                <header class="glass border-b border-[color:var(--border)] h-16 flex items-center px-4 sm:px-6 justify-between sticky top-0 z-40">
+                <header
+                    class="glass border-b border-[color:var(--border)] h-16 flex items-center px-4 sm:px-6 justify-between sticky top-0 z-40"
+                >
                     <div class="flex items-center gap-3">
                         <button
                             id="admin-menu-toggle"
@@ -102,18 +108,27 @@ const { title } = Astro.props;
             aria-modal="true"
             aria-labelledby="auth-modal-title"
         >
-            <div class="bg-slate-900 border border-slate-700 rounded-lg shadow-xl w-full max-w-md p-6 space-y-4">
+            <div class="card w-full max-w-md p-6 space-y-4">
                 <div class="flex items-start justify-between gap-3">
                     <div>
-                        <h2 id="auth-modal-title" class="text-lg font-semibold">Confirme para continuar</h2>
-                        <p class="text-sm text-slate-400">Digite a senha do painel para autorizar esta ação.</p>
+                        <h2 id="auth-modal-title" class="text-lg font-semibold">
+                            Confirme para continuar
+                        </h2>
+                        <p class="text-sm text-muted">
+                            Digite a senha do painel para autorizar esta ação.
+                        </p>
                     </div>
-                    <button id="auth-modal-close" class="btn btn-ghost">✕</button>
+                    <button id="auth-modal-close" class="btn btn-ghost"
+                        >✕</button
+                    >
                 </div>
 
                 <div class="space-y-3">
                     <div>
-                        <label class="block text-sm font-medium mb-1" for="auth-password">Senha</label>
+                        <label
+                            class="block text-sm font-medium mb-1"
+                            for="auth-password">Senha</label
+                        >
                         <input
                             id="auth-password"
                             name="password"
@@ -124,7 +139,10 @@ const { title } = Astro.props;
                         />
                     </div>
                     <div id="auth-totp-wrapper" class="hidden">
-                        <label class="block text-sm font-medium mb-1" for="auth-code">Código 2FA</label>
+                        <label
+                            class="block text-sm font-medium mb-1"
+                            for="auth-code">Código 2FA</label
+                        >
                         <input
                             id="auth-code"
                             type="text"
@@ -133,13 +151,19 @@ const { title } = Astro.props;
                             autocomplete="one-time-code"
                             class="w-full surface rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
                         />
-                        <p class="text-xs text-slate-500 mt-1">Use o código do seu aplicativo autenticador.</p>
+                        <p class="text-xs text-muted mt-1">
+                            Use o código do seu aplicativo autenticador.
+                        </p>
                     </div>
                 </div>
 
                 <div class="flex justify-end gap-3 pt-2">
-                    <button id="auth-cancel" class="btn btn-ghost">Cancelar</button>
-                    <button id="auth-confirm" class="btn btn-primary">Confirmar</button>
+                    <button id="auth-cancel" class="btn btn-ghost"
+                        >Cancelar</button
+                    >
+                    <button id="auth-confirm" class="btn btn-primary"
+                        >Confirmar</button
+                    >
                 </div>
             </div>
         </div>
@@ -156,7 +180,8 @@ const { title } = Astro.props;
                 const modalCancel = document.getElementById("auth-cancel");
                 const modalConfirm = document.getElementById("auth-confirm");
                 const passwordInput = document.getElementById("auth-password");
-                const codeWrapper = document.getElementById("auth-totp-wrapper");
+                const codeWrapper =
+                    document.getElementById("auth-totp-wrapper");
                 const codeInput = document.getElementById("auth-code");
                 let activeForm = null;
                 let requireTotp = false;
@@ -168,7 +193,8 @@ const { title } = Astro.props;
                 };
 
                 themeBtn?.addEventListener("click", () => {
-                    const next = html.dataset.theme === "dark" ? "light" : "dark";
+                    const next =
+                        html.dataset.theme === "dark" ? "light" : "dark";
                     html.dataset.theme = next;
                     localStorage.setItem("theme", next);
                     applyIcon();
@@ -176,7 +202,8 @@ const { title } = Astro.props;
                 applyIcon();
 
                 menuBtn?.addEventListener("click", () => {
-                    const isOpen = sidebar?.classList.contains("hidden") === false;
+                    const isOpen =
+                        sidebar?.classList.contains("hidden") === false;
                     sidebar?.classList.toggle("hidden", isOpen);
                     menuBtn.setAttribute("aria-expanded", String(!isOpen));
                 });
@@ -211,7 +238,9 @@ const { title } = Astro.props;
                         return;
                     }
 
-                    let pwdField = form.querySelector('input[name="password"][data-injected="true"]');
+                    let pwdField = form.querySelector(
+                        'input[name="password"][data-injected="true"]',
+                    );
                     if (!pwdField) {
                         pwdField = document.createElement("input");
                         pwdField.type = "hidden";
@@ -222,7 +251,9 @@ const { title } = Astro.props;
                     pwdField.value = pwd;
 
                     if (requireTotp) {
-                        let codeField = form.querySelector('input[name="code"][data-injected="true"]');
+                        let codeField = form.querySelector(
+                            'input[name="code"][data-injected="true"]',
+                        );
                         if (!codeField) {
                             codeField = document.createElement("input");
                             codeField.type = "hidden";
@@ -241,13 +272,15 @@ const { title } = Astro.props;
                     closeModal();
                 };
 
-                document.querySelectorAll("form[data-require-auth]").forEach((form) => {
-                    form.addEventListener("submit", (ev) => {
-                        if (form.dataset.authIgnore === "true") return;
-                        ev.preventDefault();
-                        openModal(form);
+                document
+                    .querySelectorAll("form[data-require-auth]")
+                    .forEach((form) => {
+                        form.addEventListener("submit", (ev) => {
+                            if (form.dataset.authIgnore === "true") return;
+                            ev.preventDefault();
+                            openModal(form);
+                        });
                     });
-                });
 
                 modalClose?.addEventListener("click", closeModal);
                 modalCancel?.addEventListener("click", closeModal);
