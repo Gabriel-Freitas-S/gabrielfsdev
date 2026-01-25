@@ -21,14 +21,16 @@ binding = "R2"
 bucket_name = "gabrielfs-hero"
 preview_bucket_name = "gabrielfs-hero-preview"
 
+
 [env.preview]
+name = "gabrielfsdev-preview"
 compatibility_flags = [ "nodejs_compat" ]
 
 [[env.preview.d1_databases]]
 binding = "DB"
-database_name = "gabrielfs-db"
-database_id = "9f42d962-194d-4ae6-ba4c-1ac69e5a7b3d"
-preview_database_id = "9f42d962-194d-4ae6-ba4c-1ac69e5a7b3d"
+database_name = "gabrielfs-dev-db"
+database_id = "ce8f3bb0-32ec-460c-a88c-863db8050287"
+preview_database_id = "ce8f3bb0-32ec-460c-a88c-863db8050287"
 
 [[env.preview.r2_buckets]]
 binding = "R2"
