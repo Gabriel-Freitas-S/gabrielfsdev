@@ -18,6 +18,8 @@ const defaults = {
     hero_cta_experience: "Ver Experiência",
     hero_cta_certifications: "Certificações",
     hero_image_key: "",
+    linkedin_url: "https://www.linkedin.com/in/gabrielfsdev",
+    github_url: "https://github.com/Gabriel-Freitas-S",
 };
 
 const contentSchema = z.object({
@@ -25,6 +27,24 @@ const contentSchema = z.object({
     hero_subtitle: z.string().min(10, "Subtítulo muito curto."),
     hero_cta_experience: z.string().min(2, "CTA inválido."),
     hero_cta_certifications: z.string().min(2, "CTA inválido."),
+    linkedin_url: z
+        .string()
+        .trim()
+        .optional()
+        .transform((value) => value || "")
+        .refine(
+            (value) => !value || value.startsWith("https://"),
+            "URL do LinkedIn inválida.",
+        ),
+    github_url: z
+        .string()
+        .trim()
+        .optional()
+        .transform((value) => value || "")
+        .refine(
+            (value) => !value || value.startsWith("https://"),
+            "URL do GitHub inválida.",
+        ),
     password: z.string().min(8, "Senha obrigatória."),
 });
 
@@ -37,7 +57,7 @@ async function loadContent() {
 
     if (!env?.DB) return defaults;
     const { results } = await env.DB.prepare(
-        "SELECT key, value FROM site_content WHERE key IN ('hero_title','hero_subtitle','hero_cta_experience','hero_cta_certifications','hero_image_key')",
+        "SELECT key, value FROM site_content WHERE key IN ('hero_title','hero_subtitle','hero_cta_experience','hero_cta_certifications','hero_image_key','linkedin_url','github_url')",
     ).all();
     const map: Record<string, string> = {};
     results?.forEach((row: any) => {
@@ -56,6 +76,8 @@ if (Astro.request.method === "POST" && env?.DB) {
             hero_subtitle: data.get("hero_subtitle"),
             hero_cta_experience: data.get("hero_cta_experience"),
             hero_cta_certifications: data.get("hero_cta_certifications"),
+            linkedin_url: data.get("linkedin_url"),
+            github_url: data.get("github_url"),
             password: data.get("password"),
         });
 
@@ -76,6 +98,8 @@ if (Astro.request.method === "POST" && env?.DB) {
                 ["hero_subtitle", payload.hero_subtitle],
                 ["hero_cta_experience", payload.hero_cta_experience],
                 ["hero_cta_certifications", payload.hero_cta_certifications],
+                ["linkedin_url", payload.linkedin_url],
+                ["github_url", payload.github_url],
             ];
 
             for (const [key, value] of entries) {
@@ -185,6 +209,34 @@ const content = await loadContent();
                     value={content.hero_cta_certifications}
                     class="w-full bg-slate-800 border border-slate-700 rounded p-2"
                     required
+                />
+            </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-sm font-medium mb-1" for="linkedin_url"
+                    >URL do LinkedIn</label
+                >
+                <input
+                    type="url"
+                    name="linkedin_url"
+                    id="linkedin_url"
+                    value={content.linkedin_url}
+                    placeholder="https://www.linkedin.com/in/seu-usuario"
+                    class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+                />
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1" for="github_url"
+                    >URL do GitHub</label
+                >
+                <input
+                    type="url"
+                    name="github_url"
+                    id="github_url"
+                    value={content.github_url}
+                    placeholder="https://github.com/seu-usuario"
+                    class="w-full bg-slate-800 border border-slate-700 rounded p-2"
                 />
             </div>
         </div>

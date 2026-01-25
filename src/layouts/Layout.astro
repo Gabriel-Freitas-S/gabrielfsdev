@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import { ensureCoreTables } from "../utils/db";
 
 interface Props {
 	title: string;
@@ -7,6 +8,34 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
+const runtime = Astro.locals.runtime;
+const env = runtime?.env;
+
+const socialDefaults = {
+	linkedin_url: "https://www.linkedin.com/in/gabrielfsdev",
+	github_url: "https://github.com/Gabriel-Freitas-S",
+};
+
+let socialLinks = socialDefaults;
+
+try {
+	if (env?.DB) {
+		await ensureCoreTables(env);
+		const { results } = await env.DB.prepare(
+			"SELECT key, value FROM site_content WHERE key IN ('linkedin_url','github_url')",
+		).all();
+		const map: Record<string, string> = {};
+		results?.forEach((row: any) => {
+			map[row.key] = row.value;
+		});
+		socialLinks = { ...socialDefaults, ...map };
+	}
+} catch (e) {
+	console.error("Erro ao carregar links sociais", e);
+}
+
+const linkedinUrl = socialLinks.linkedin_url?.trim() || "";
+const githubUrl = socialLinks.github_url?.trim() || "";
 ---
 
 <!doctype html>
@@ -170,48 +199,52 @@ const { title, description } = Astro.props;
 						role="group"
 						aria-label="Perfis sociais"
 					>
-						<a
-							href="https://www.linkedin.com/in/gabrielfsdev"
-							class="nav-social__button nav-social__linkedin"
-							target="_blank"
-							rel="noreferrer noopener"
-							aria-label="Perfil no LinkedIn"
-						>
-							<svg
-								aria-hidden="true"
-								xmlns="http://www.w3.org/2000/svg"
-								width="18"
-								height="18"
-								viewBox="0 0 24 24"
-								fill="currentColor"
+						{linkedinUrl && (
+							<a
+								href={linkedinUrl}
+								class="nav-social__button nav-social__linkedin"
+								target="_blank"
+								rel="noreferrer noopener"
+								aria-label="Perfil no LinkedIn"
 							>
-								<path
-									d="M4.983 3.5C4.983 4.881 3.88 6 2.5 6S0 4.881 0 3.5 1.103 1 2.483 1 4.983 2.119 4.983 3.5zM.284 8.5h4.398V23H.284zM8.63 8.5h4.213v1.98h.06c.587-1.11 2.022-2.28 4.163-2.28 4.457 0 5.276 2.94 5.276 6.766V23h-4.4v-6.26c0-1.493-.027-3.415-2.08-3.415-2.08 0-2.398 1.625-2.398 3.303V23h-4.4z"
-								></path>
-							</svg>
-							<span class="nav-social__text">LinkedIn</span>
-						</a>
-						<a
-							href="https://github.com/Gabriel-Freitas-S"
-							class="nav-social__button nav-social__github"
-							target="_blank"
-							rel="noreferrer noopener"
-							aria-label="Perfil no GitHub"
-						>
-							<svg
-								aria-hidden="true"
-								xmlns="http://www.w3.org/2000/svg"
-								width="18"
-								height="18"
-								viewBox="0 0 24 24"
-								fill="currentColor"
+								<svg
+									aria-hidden="true"
+									xmlns="http://www.w3.org/2000/svg"
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="currentColor"
+								>
+									<path
+										d="M4.983 3.5C4.983 4.881 3.88 6 2.5 6S0 4.881 0 3.5 1.103 1 2.483 1 4.983 2.119 4.983 3.5zM.284 8.5h4.398V23H.284zM8.63 8.5h4.213v1.98h.06c.587-1.11 2.022-2.28 4.163-2.28 4.457 0 5.276 2.94 5.276 6.766V23h-4.4v-6.26c0-1.493-.027-3.415-2.08-3.415-2.08 0-2.398 1.625-2.398 3.303V23h-4.4z"
+									></path>
+								</svg>
+								<span class="nav-social__text">LinkedIn</span>
+							</a>
+						)}
+						{githubUrl && (
+							<a
+								href={githubUrl}
+								class="nav-social__button nav-social__github"
+								target="_blank"
+								rel="noreferrer noopener"
+								aria-label="Perfil no GitHub"
 							>
-								<path
-									d="M12 .5C5.648.5.5 5.648.5 12c0 5.088 3.292 9.395 7.862 10.915.574.106.783-.25.783-.556 0-.274-.01-1.178-.016-2.138-3.197.695-3.873-1.35-3.873-1.35-.523-1.33-1.277-1.684-1.277-1.684-1.044-.714.079-.7.079-.7 1.155.081 1.763 1.187 1.763 1.187 1.027 1.76 2.695 1.252 3.35.957.104-.744.402-1.253.732-1.54-2.553-.29-5.237-1.276-5.237-5.68 0-1.255.448-2.28 1.184-3.084-.12-.289-.512-1.454.112-3.033 0 0 .967-.31 3.168 1.177a11.06 11.06 0 0 1 2.882-.388c.976.005 1.959.132 2.882.388 2.2-1.487 3.165-1.177 3.165-1.177.625 1.579.233 2.744.114 3.033.737.804 1.183 1.829 1.183 3.084 0 4.416-2.689 5.386-5.253 5.67.414.355.783 1.054.783 2.124 0 1.535-.014 2.773-.014 3.15 0 .31.207.669.79.556C20.712 21.392 24 17.084 24 12 24 5.648 18.852.5 12 .5z"
-								></path>
-							</svg>
-							<span class="nav-social__text">GitHub</span>
-						</a>
+								<svg
+									aria-hidden="true"
+									xmlns="http://www.w3.org/2000/svg"
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="currentColor"
+								>
+									<path
+										d="M12 .5C5.648.5.5 5.648.5 12c0 5.088 3.292 9.395 7.862 10.915.574.106.783-.25.783-.556 0-.274-.01-1.178-.016-2.138-3.197.695-3.873-1.35-3.873-1.35-.523-1.33-1.277-1.684-1.277-1.684-1.044-.714.079-.7.079-.7 1.155.081 1.763 1.187 1.763 1.187 1.027 1.76 2.695 1.252 3.35.957.104-.744.402-1.253.732-1.54-2.553-.29-5.237-1.276-5.237-5.68 0-1.255.448-2.28 1.184-3.084-.12-.289-.512-1.454.112-3.033 0 0 .967-.31 3.168 1.177a11.06 11.06 0 0 1 2.882-.388c.976.005 1.959.132 2.882.388 2.2-1.487 3.165-1.177 3.165-1.177.625 1.579.233 2.744.114 3.033.737.804 1.183 1.829 1.183 3.084 0 4.416-2.689 5.386-5.253 5.67.414.355.783 1.054.783 2.124 0 1.535-.014 2.773-.014 3.15 0 .31.207.669.79.556C20.712 21.392 24 17.084 24 12 24 5.648 18.852.5 12 .5z"
+									></path>
+								</svg>
+								<span class="nav-social__text">GitHub</span>
+							</a>
+						)}
 					</div>
 					<button
 						id="theme-toggle"
