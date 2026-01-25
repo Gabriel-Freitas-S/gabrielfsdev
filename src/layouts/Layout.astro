@@ -216,15 +216,17 @@ const { title, description } = Astro.props;
 					<button
 						id="theme-toggle"
 						class="btn btn-ghost h-10 w-10 p-2"
-						aria-label="Alternar tema"
+						aria-label="Alternar tema entre claro e escuro"
 						aria-pressed="false"
 					>
-						<span id="theme-icon" aria-hidden="true">☀️</span>
+						<span id="theme-icon" aria-hidden="true" class="text-xl"
+							>☀️</span
+						>
 					</button>
 					<button
 						id="menu-toggle"
-						class="md:hidden btn btn-ghost h-10 w-10 p-2"
-						aria-label="Abrir menu"
+						class="md:hidden btn btn-ghost h-10 w-10 p-2 flex items-center justify-center text-xl"
+						aria-label="Abrir menu de navegação"
 						aria-expanded="false"
 						aria-controls="mobile-menu"
 					>

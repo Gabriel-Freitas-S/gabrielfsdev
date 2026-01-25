@@ -134,7 +134,7 @@
 
 	.hero-bg {
 		background: radial-gradient(circle at 20% 20%, var(--glow), transparent 35%),
-			radial-gradient(circle at 80% 0%, rgba(59, 130, 246, 0.2), transparent 30%),
+			radial-gradient(circle at 80% 0%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 30%),
 			linear-gradient(180deg, var(--surface) 0%, var(--bg) 60%);
 	}
 }
