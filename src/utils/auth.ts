@@ -64,13 +64,52 @@ export async function hashPassword(password: string, existingSalt?: Uint8Array):
 }
 
 // Verify password against PBKDF2 hash
+// Verify password against PBKDF2 hash
 async function verifyPBKDF2(password: string, storedHash: string): Promise<boolean> {
     const parts = storedHash.split(":");
-    if (parts.length !== 3 || parts[0] !== "pbkdf2") return false;
-    const saltHex = parts[1];
-    const salt = new Uint8Array(saltHex.match(/.{2}/g)!.map(byte => parseInt(byte, 16)));
-    const newHash = await hashPassword(password, salt);
-    return timingSafeEqual(newHash, storedHash);
+
+    // Formato antigo: pbkdf2:salt:hash (3 partes)
+    // Formato novo: pbkdf2:iterations:salt:hash (4 partes)
+
+    let iterations = PBKDF2_ITERATIONS;
+    let saltHex = "";
+
+    if (parts.length === 4) {
+        iterations = parseInt(parts[1], 10);
+        saltHex = parts[2];
+    } else if (parts.length === 3) {
+        saltHex = parts[1];
+    } else {
+        return false;
+    }
+
+    const salt = new Uint8Array(saltHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+
+    // Recalcular hash usando as iterações e salt armazenados
+    const keyMaterial = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(password),
+        "PBKDF2",
+        false,
+        ["deriveBits"]
+    );
+
+    const derivedBits = await crypto.subtle.deriveBits(
+        { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
+        keyMaterial,
+        256
+    );
+
+    const hashHex = Array.from(new Uint8Array(derivedBits))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+
+    // Reconstruir a string esperada exatamente como armazenada
+    const expectedHash = parts.length === 4
+        ? `pbkdf2:${iterations}:${saltHex}:${hashHex}`
+        : `pbkdf2:${saltHex}:${hashHex}`;
+
+    return timingSafeEqual(expectedHash, storedHash);
 }
 
 export async function ensureAdminTables(env: any) {
