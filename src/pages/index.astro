@@ -1,143 +1,345 @@
 ---
-import Layout from "../layouts/Layout.astro";
-import { Image } from "astro:assets";
-import heroPlaceholder from "../assets/hero-placeholder.svg";
+import Layout from '../layouts/Layout.astro';
+import { db, Content, HeroImage } from 'astro:db';
+import { eq } from 'astro:db';
 
-const runtime = Astro.locals.runtime;
-const env = runtime?.env;
-const hasR2 = Boolean(env?.R2);
+// Buscar conteúdo do banco de dados
+const heroContent = await db.select().from(Content).where(eq(Content.slug, 'hero')).get();
+const aboutContent = await db.select().from(Content).where(eq(Content.slug, 'about')).get();
+const heroImage = await db.select().from(HeroImage).where(eq(HeroImage.isActive, true)).get();
 
-const defaults = {
-	hero_title: "Desenvolvedor Full Stack",
-	hero_subtitle:
-		"Especialista em criar soluções modernas, escaláveis e esteticamente agradáveis. Focando agora em infraestrutura Cloudflare e experiência do usuário.",
-	hero_cta_experience: "Ver Experiência",
-	hero_cta_certifications: "Certificações",
-	hero_image_key: "",
-};
-
-let content = defaults;
-
-try {
-	if (env?.DB) {
-		const rows = await env.DB.prepare(
-			"SELECT key, value FROM site_content WHERE key IN ('hero_title','hero_subtitle','hero_cta_experience','hero_cta_certifications','hero_image_key')",
-		).all();
-		const map: Record<string, string> = {};
-		rows?.results?.forEach((row: any) => {
-			if (row?.key) map[row.key] = row.value;
-		});
-		content = { ...defaults, ...map };
-	}
-} catch (e) {
-	console.error("Erro ao carregar conteúdo", e);
-}
-
-const heroImageSrc =
-	content.hero_image_key && hasR2
-		? `/uploads/${content.hero_image_key}`
-		: heroPlaceholder;
+const title = heroContent?.title || "Gabriel Freitas";
+const subtitle = heroContent?.subtitle || "Desenvolvedor Full Stack";
+const description = aboutContent?.body || "Apaixonado por tecnologia e inovação.";
 ---
 
-<Layout title="GabrielFS.dev" description={content.hero_subtitle}>
-	<main>
-		{/* Hero Section */}
-		<section
-			class="min-h-[80vh] flex flex-col justify-center items-center text-center px-6 md:px-4 py-12 md:py-0 hero-bg"
-		>
-			<div
-				class="max-w-6xl w-full flex flex-col gap-12 md:gap-10 md:grid md:grid-cols-[1.1fr_0.9fr] items-center"
-			>
-				<div
-					class="max-w-3xl space-y-6 animate-fade-in-up mx-auto order-2 md:order-1"
-				>
-					<h1
-						class="text-4xl md:text-6xl font-black tracking-tight px-4 md:px-0"
-					>
-						{content.hero_title}
-					</h1>
-					<p
-						class="text-base md:text-xl text-muted max-w-2xl mx-auto leading-relaxed px-4 md:px-0"
-					>
-						{content.hero_subtitle}
-					</p>
+<Layout title="Gabriel FS | Engenheiro de Software">
+  <!-- Canvas Background (Rede Neural) -->
+  <canvas id="bg-canvas"></canvas>
 
-					<div class="cta-group">
-						<div class="cta-buttons">
-							<a
-								href="/experiencia"
-								class="btn btn-primary px-6 md:px-8"
-								aria-label="Ver minha experiência profissional"
-							>
-								{content.hero_cta_experience}
-							</a>
-							<a
-								href="/certificacoes"
-								class="btn btn-ghost px-6 md:px-8"
-								aria-label="Ver minhas certificações"
-							>
-								{content.hero_cta_certifications}
-							</a>
-						</div>
-					</div>
-				</div>
+  <main class="container mx-auto px-4 pt-20 pb-12 relative z-10">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center min-h-[calc(100vh-100px)]">
+      
+      <!-- Coluna Texto (Esquerda) -->
+      <div class="space-y-6 text-center lg:text-left order-2 lg:order-1 fade-in">
+        <div class="inline-block px-3 py-1 border border-blue-500/30 rounded-full bg-blue-900/10 text-blue-300 text-xs tracking-widest uppercase mb-2">
+          Engenharia da Computação
+        </div>
 
-				<div
-					class="w-full max-w-xs md:max-w-sm mx-auto order-1 md:order-2 px-4 md:px-0"
-				>
-					<div
-						class="relative overflow-hidden rounded-3xl border border-[color:var(--border)] shadow-2xl"
-					>
-						<Image
-							src={heroImageSrc}
-							alt="Foto principal"
-							class="w-full h-auto"
-							loading="eager"
-							decoding="async"
-							fetchpriority="high"
-							width={400}
-							height={500}
-							sizes="(max-width: 768px) 90vw, 400px"
-						/>
-					</div>
-				</div>
-			</div>
-		</section>
+        <h1 class="text-5xl md:text-7xl font-bold leading-tight font-display">
+          Transformando <br />
+          <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-blue-500">
+            Lógica em Arte
+          </span>
+        </h1>
+        
+        <div class="text-gray-300 text-lg leading-relaxed max-w-xl mx-auto lg:mx-0 prose prose-invert">
+            <p>{description}</p>
+        </div>
 
-		{
-			/* Stats Section removed: visitor counter disabled to avoid KV reload loops */
-		}
-	</main>
+        <div class="flex flex-wrap gap-4 justify-center lg:justify-start pt-4">
+          <a href="/experiencia" class="btn-glow px-8 py-4 bg-gradient-to-r from-blue-700 to-blue-600 rounded-lg text-white font-bold tracking-wide hover:scale-105 transition-transform">
+            Ver Experiência
+          </a>
+          <a href="https://github.com/gabrielfsdev" target="_blank" class="px-8 py-4 border border-gray-700 hover:border-blue-400 rounded-lg text-gray-300 hover:text-white transition flex items-center gap-2">
+            GitHub
+          </a>
+        </div>
+      </div>
 
-	<footer
-		class="py-10 border-t border-[color:var(--border)] text-center text-muted text-sm px-4"
-	>
-		<p>
-			&copy; {new Date().getFullYear()} Gabriel Freitas Souza. Built with Astro
-			& Cloudflare.
-		</p>
-	</footer>
+      <!-- Coluna Visual (Direita) - Safira -->
+      <div class="flex justify-center items-center relative order-1 lg:order-2 mb-10 lg:mb-0 fade-in delay-200">
+        <!-- Efeito de brilho de fundo -->
+        <div class="absolute w-64 h-64 bg-blue-600 rounded-full blur-[100px] opacity-20 animate-pulse"></div>
+        
+        <div class="sapphire-wrapper">
+          <!-- Tech Orbitals -->
+          <div class="orbit-container">
+            <div class="orbit-item"><span>JS</span></div>
+            <div class="orbit-item"><span>TS</span></div>
+            <div class="orbit-item"><span>PY</span></div>
+          </div>
+
+          <!-- A Safira -->
+          <div class="sapphire">
+            {heroImage && (
+              <img 
+                src={heroImage.path} 
+                alt="Gabriel FS" 
+                class="sapphire-img"
+              />
+            )}
+            <div class="shine"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
 </Layout>
 
 <style>
-	.cta-group {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.75rem;
-		margin-top: 1.25rem;
-	}
+  /* Fontes adicionais para o efeito */
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
 
-	.cta-buttons {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.75rem;
-		justify-content: center;
-	}
+  .font-display {
+    font-family: 'Orbitron', sans-serif;
+  }
 
-	@media (min-width: 768px) {
-		.cta-group {
-			margin-top: 1.5rem;
-		}
-	}
+  /* --- Canvas Background --- */
+  #bg-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0; /* Atrás do conteúdo */
+    opacity: 0.3;
+    pointer-events: none; /* Permite clicar através dele */
+  }
+
+  /* --- O Efeito da Safira --- */
+  .sapphire-wrapper {
+    position: relative;
+    width: 250px;
+    height: 250px;
+    animation: float 6s ease-in-out infinite;
+    filter: drop-shadow(0 0 40px rgba(59, 130, 246, 0.4));
+  }
+
+  .sapphire {
+    width: 100%;
+    height: 100%;
+    /* Gradiente de fundo base para a pedra */
+    background: linear-gradient(135deg, #0b1a3a 0%, #1e40af 50%, #60a5fa 100%);
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.5s ease;
+  }
+
+  .sapphire:hover {
+    filter: brightness(1.2);
+    transform: scale(1.05);
+  }
+
+  /* A imagem dentro da safira */
+  .sapphire-img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 1; /* Fica abaixo das facetas */
+    opacity: 0.7; /* Transparência para misturar com o azul */
+    mix-blend-mode: luminosity; /* Faz a foto pegar a cor da pedra */
+    /* Garante que a imagem respeite o corte */
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  }
+
+  /* Facetas Internas (Camadas sobre a imagem) */
+  .sapphire::before {
+    content: '';
+    position: absolute;
+    inset: 10px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 40%, rgba(0,0,0,0.5) 100%);
+    clip-path: polygon(50% 10%, 90% 30%, 90% 70%, 50% 90%, 10% 70%, 10% 30%);
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .sapphire::after {
+    content: '';
+    position: absolute;
+    top: 25%; left: 25%; width: 50%; height: 50%;
+    background: linear-gradient(45deg, rgba(30, 58, 138, 0.4), rgba(59, 130, 246, 0.4)); /* Mais transparente para ver a foto */
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    opacity: 0.9;
+    z-index: 3;
+    pointer-events: none;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+  }
+
+  /* Brilho */
+  .shine {
+    position: absolute;
+    top: 0; left: -150%;
+    width: 100%; height: 100%;
+    background: linear-gradient(to right, transparent, rgba(255,255,255,0.6), transparent);
+    transform: skewX(-25deg);
+    animation: shine-effect 5s infinite;
+    z-index: 4;
+    pointer-events: none;
+  }
+
+  @keyframes shine-effect {
+    0%, 100% { left: -150%; }
+    50% { left: 150%; }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-15px); }
+  }
+
+  /* Orbiting Tech Elements */
+  .orbit-container {
+    position: absolute;
+    inset: -40px;
+    animation: spin 20s linear infinite;
+    pointer-events: none;
+  }
+
+  .orbit-item {
+    position: absolute;
+    width: 40px; height: 40px;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(59, 130, 246, 0.5);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    color: #60a5fa;
+    backdrop-filter: blur(4px);
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+  }
+
+  .orbit-item:nth-child(1) { top: 0; left: 50%; transform: translate(-50%, -50%); }
+  .orbit-item:nth-child(2) { bottom: 20%; right: 0; }
+  .orbit-item:nth-child(3) { bottom: 20%; left: 0; }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  
+  .orbit-item span {
+    animation: spin-reverse 20s linear infinite;
+  }
+  @keyframes spin-reverse {
+    from { transform: rotate(360deg); }
+    to { transform: rotate(0deg); }
+  }
+
+  .btn-glow {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
+  }
+
+  .btn-glow:hover {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+  }
+  
+  /* Animações de entrada */
+  .fade-in {
+      animation: fadeIn 1s ease-out forwards;
+      opacity: 0;
+  }
+  
+  .delay-200 {
+      animation-delay: 0.2s;
+  }
+
+  @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+  }
 </style>
+
+<script>
+  // Script do Background (Rede Neural)
+  const canvas = document.getElementById('bg-canvas') as HTMLCanvasElement;
+  
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    
+    if (ctx) {
+      let width: number, height: number;
+      let particles: Particle[] = [];
+      
+      // Ajuste para performance
+      const particleCount = window.innerWidth > 1000 ? 50 : 25; 
+
+      const resize = () => {
+          width = canvas.width = window.innerWidth;
+          height = canvas.height = window.innerHeight;
+          initParticles();
+      };
+
+      class Particle {
+          x: number;
+          y: number;
+          vx: number;
+          vy: number;
+          size: number;
+          color: string;
+
+          constructor() {
+              this.x = Math.random() * width;
+              this.y = Math.random() * height;
+              this.vx = (Math.random() - 0.5) * 0.3;
+              this.vy = (Math.random() - 0.5) * 0.3;
+              this.size = Math.random() * 2;
+              this.color = Math.random() > 0.5 ? '#3b82f6' : '#64748b';
+          }
+
+          update() {
+              this.x += this.vx;
+              this.y += this.vy;
+
+              if (this.x < 0 || this.x > width) this.vx *= -1;
+              if (this.y < 0 || this.y > height) this.vy *= -1;
+          }
+
+          draw() {
+              if (!ctx) return;
+              ctx.beginPath();
+              ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+              ctx.fillStyle = this.color;
+              ctx.fill();
+          }
+      }
+
+      const initParticles = () => {
+          particles = [];
+          for (let i = 0; i < particleCount; i++) {
+              particles.push(new Particle());
+          }
+      };
+
+      const animate = () => {
+          ctx.clearRect(0, 0, width, height);
+          
+          for (let i = 0; i < particles.length; i++) {
+              particles[i].update();
+              particles[i].draw();
+
+              for (let j = i; j < particles.length; j++) {
+                  let dx = particles[i].x - particles[j].x;
+                  let dy = particles[i].y - particles[j].y;
+                  let distance = Math.sqrt(dx * dx + dy * dy);
+
+                  if (distance < 120) {
+                      ctx.beginPath();
+                      let opacity = 1 - (distance / 120);
+                      ctx.strokeStyle = `rgba(59, 130, 246, ${opacity * 0.15})`;
+                      ctx.lineWidth = 1;
+                      ctx.moveTo(particles[i].x, particles[i].y);
+                      ctx.lineTo(particles[j].x, particles[j].y);
+                      ctx.stroke();
+                  }
+              }
+          }
+          requestAnimationFrame(animate);
+      };
+
+      window.addEventListener('resize', resize);
+      resize();
+      animate();
+    }
+  }
+</script>
