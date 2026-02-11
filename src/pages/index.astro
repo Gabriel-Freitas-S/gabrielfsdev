@@ -1,16 +1,46 @@
 ---
-import Layout from '../layouts/Layout.astro';
-import { db, Content, HeroImage } from 'astro:db';
-import { eq } from 'astro:db';
+import Layout from "../layouts/Layout.astro";
+import { Image } from "astro:assets";
+import heroPlaceholder from "../assets/hero-placeholder.svg";
 
-// Buscar conteúdo do banco de dados
-const heroContent = await db.select().from(Content).where(eq(Content.slug, 'hero')).get();
-const aboutContent = await db.select().from(Content).where(eq(Content.slug, 'about')).get();
-const heroImage = await db.select().from(HeroImage).where(eq(HeroImage.isActive, true)).get();
+const runtime = Astro.locals.runtime;
+const env = runtime?.env;
+const hasR2 = Boolean(env?.R2);
 
-const title = heroContent?.title || "Gabriel Freitas";
-const subtitle = heroContent?.subtitle || "Desenvolvedor Full Stack";
-const description = aboutContent?.body || "Apaixonado por tecnologia e inovação.";
+const defaults = {
+	hero_title: "Desenvolvedor Full Stack",
+	hero_subtitle:
+		"Especialista em criar soluções modernas, escaláveis e esteticamente agradáveis. Focando agora em infraestrutura Cloudflare e experiência do usuário.",
+	hero_cta_experience: "Ver Experiência",
+	hero_cta_certifications: "Certificações",
+	hero_image_key: "",
+};
+
+let content = defaults;
+
+try {
+	if (env?.DB) {
+		const rows = await env.DB.prepare(
+			"SELECT key, value FROM site_content WHERE key IN ('hero_title','hero_subtitle','hero_cta_experience','hero_cta_certifications','hero_image_key')",
+		).all();
+		const map: Record<string, string> = {};
+		rows?.results?.forEach((row: any) => {
+			if (row?.key) map[row.key] = row.value;
+		});
+		content = { ...defaults, ...map };
+	}
+} catch (e) {
+	console.error("Erro ao carregar conteúdo", e);
+}
+
+const heroImageSrc =
+	content.hero_image_key && hasR2
+		? `/uploads/${content.hero_image_key}`
+		: heroPlaceholder;
+
+const title = content.hero_title;
+const subtitle = content.hero_subtitle;
+const description = content.hero_subtitle;
 ---
 
 <Layout title="Gabriel FS | Engenheiro de Software">
@@ -62,9 +92,9 @@ const description = aboutContent?.body || "Apaixonado por tecnologia e inovaçã
 
           <!-- A Safira -->
           <div class="sapphire">
-            {heroImage && (
+            {heroImageSrc && (
               <img 
-                src={heroImage.path} 
+                src={heroImageSrc} 
                 alt="Gabriel FS" 
                 class="sapphire-img"
               />
