@@ -83,13 +83,11 @@ const heroImageSrc =
 				<div
 					class="w-full max-w-xs md:max-w-sm mx-auto order-1 md:order-2 px-4 md:px-0"
 				>
-					<div
-						class="relative overflow-hidden rounded-3xl border border-[color:var(--border)] shadow-2xl"
-					>
+					<div class="relative overflow-hidden rounded-3xl border border-[color:var(--border)] shadow-2xl aspect-[4/5]">
 						<Image
 							src={heroImageSrc}
 							alt="Foto principal"
-							class="w-full h-auto"
+							class="w-full h-full object-cover object-center"
 							loading="eager"
 							decoding="async"
 							fetchpriority="high"

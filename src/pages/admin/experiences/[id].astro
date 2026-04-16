@@ -7,7 +7,7 @@ import { ensureCoreTables } from "../../../utils/db";
 const { id } = Astro.params;
 const isNew = id === "new";
 
-const { env } = Astro.locals.runtime;
+import { env } from "cloudflare:workers";
 let xp = {
     company: "",
     role: "",

@@ -2,7 +2,7 @@
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import { ensureCoreTables, seedExperiencesIfEmpty } from "../../../utils/db";
 
-const { env } = Astro.locals.runtime;
+import { env } from "cloudflare:workers";
 await ensureCoreTables(env);
 await seedExperiencesIfEmpty(env);
 const { results } = await env.DB.prepare(
