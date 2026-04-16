@@ -1,4 +1,5 @@
 ---
+import { env } from "cloudflare:workers";
 import { z } from "zod";
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import { ensureAdminTables, verifyPassword } from "../../../utils/auth";
@@ -7,7 +8,6 @@ import { ensureCoreTables } from "../../../utils/db";
 const { id } = Astro.params;
 const isNew = id === "new";
 
-import { env } from "cloudflare:workers";
 let xp = {
     company: "",
     role: "",

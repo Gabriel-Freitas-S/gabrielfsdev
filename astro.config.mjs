@@ -8,7 +8,10 @@ import cloudflare from '@astrojs/cloudflare';
 
 // https://astro.build/config
 export default defineConfig({
-  prefetch: true,
+  prefetch: {
+    prefetchAll: false,
+    defaultStrategy: 'hover'
+  },
   output: 'server',
   vite: {
     plugins: [tailwindcss()],

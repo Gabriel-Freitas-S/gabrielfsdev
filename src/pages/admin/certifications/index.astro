@@ -1,8 +1,8 @@
 ---
+import { env } from "cloudflare:workers";
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import { ensureCoreTables, seedCertificationsIfEmpty } from "../../../utils/db";
 
-import { env } from "cloudflare:workers";
 await ensureCoreTables(env);
 await seedCertificationsIfEmpty(env);
 const { results } = await env.DB.prepare(
