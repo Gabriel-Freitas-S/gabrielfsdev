@@ -1,7 +1,7 @@
+import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 
 export const GET: APIRoute = async ({ params, locals }) => {
-    const env = locals.runtime?.env;
     if (!env?.R2) return new Response("R2 não configurado", { status: 500 });
 
     const key = params.key;

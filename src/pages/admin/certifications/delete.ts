@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { z } from "zod";
 import { ensureAdminTables, verifyPassword } from "../../../utils/auth";
@@ -11,7 +12,6 @@ const deleteSchema = z.object({
 });
 
 export const POST: APIRoute = async ({ request, locals, redirect }) => {
-	const env = locals.runtime?.env;
 	const url = new URL(request.url);
 	const form = await request.formData();
 

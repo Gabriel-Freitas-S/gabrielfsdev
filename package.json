@@ -9,14 +9,18 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^12.6.12",
-    "@tailwindcss/vite": "^4.1.18",
-    "astro": "^5.16.6",
-    "zod": "^4.3.4",
-    "tailwindcss": "^4.1.18"
+    "@astrojs/cloudflare": "^13.1.10",
+    "@tailwindcss/vite": "^4.2.2",
+    "astro": "^6.1.7",
+    "tailwindcss": "^4.2.2",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260101.0",
-    "wrangler": "^4.54.0"
+    "@cloudflare/workers-types": "^4.20260416.2",
+    "wrangler": "^4.83.0"
+  },
+  "overrides": {
+    "cookie": "1.0.2",
+    "vite": "^7.3.2"
   }
 }

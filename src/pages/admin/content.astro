@@ -1,11 +1,9 @@
 ---
+import { env } from "cloudflare:workers";
 import { z } from "zod";
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import { ensureAdminTables, verifyPassword } from "../../utils/auth";
 import { ensureCoreTables } from "../../utils/db";
-
-const runtime = Astro.locals.runtime;
-const env = runtime?.env;
 const url = new URL(Astro.request.url);
 const saved = url.searchParams.get("saved") === "1";
 const savedImg = url.searchParams.get("img") === "1";

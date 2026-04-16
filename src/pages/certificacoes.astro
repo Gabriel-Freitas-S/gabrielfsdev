@@ -1,10 +1,9 @@
 ---
+import { env } from "cloudflare:workers";
 import Layout from "../layouts/Layout.astro";
 import { legacyCertifications } from "../data/legacy";
 
 let groupedCerts = {};
-const runtime = Astro.locals.runtime;
-const env = runtime?.env;
 
 try {
     if (env?.DB) {
@@ -93,35 +92,6 @@ const groups = Object.values(groupedCerts);
                                                 Ver credencial ↗
                                             </a>
                                         )}
-
-                                <script>
-                                const input = document.getElementById('cert-search');
-                                const items = Array.from(document.querySelectorAll('.cert-item'));
-
-                                function filter(term) {
-                                    const query = term.trim().toLowerCase();
-                                    items.forEach((item) => {
-                                        const title = item.dataset.title?.toLowerCase() || '';
-                                        const issuer = item.dataset.issuer?.toLowerCase() || '';
-                                        const group = item.dataset.group?.toLowerCase() || '';
-                                        const match = !query || title.includes(query) || issuer.includes(query) || group.includes(query);
-                                        item.classList.toggle('hidden', !match);
-                                    });
-
-                                    // Hide cards with no visible items
-                                    document.querySelectorAll('.cert-card').forEach((card) => {
-                                        const visible = card.querySelectorAll('.cert-item:not(.hidden)').length > 0;
-                                        card.classList.toggle('hidden', !visible);
-                                    });
-                                }
-
-                                input?.addEventListener('input', (e) => {
-                                    filter((e.target as HTMLInputElement).value || '');
-                                });
-
-                                document.addEventListener('astro:page-load', () => filter(''));
-                                document.addEventListener('astro:after-swap', () => filter(input?.value || ''));
-                                </script>
                                     </li>
                                 ))}
                             </ul>
@@ -139,4 +109,32 @@ const groups = Object.values(groupedCerts);
             }
         </div>
     </main>
+
+    <script is:inline data-astro-rerun>
+        (() => {
+            const input = document.getElementById('cert-search');
+            if (!input) return;
+            
+            const items = Array.from(document.querySelectorAll('.cert-item'));
+
+            function filter(term) {
+                const query = (term || '').trim().toLowerCase();
+                items.forEach((item) => {
+                    const title = item.dataset.title?.toLowerCase() || '';
+                    const issuer = item.dataset.issuer?.toLowerCase() || '';
+                    const group = item.dataset.group?.toLowerCase() || '';
+                    const match = !query || title.includes(query) || issuer.includes(query) || group.includes(query);
+                    item.classList.toggle('hidden', !match);
+                });
+
+                document.querySelectorAll('.cert-card').forEach((card) => {
+                    const visible = card.querySelectorAll('.cert-item:not(.hidden)').length > 0;
+                    card.classList.toggle('hidden', !visible);
+                });
+            }
+
+            input.addEventListener('input', (e) => filter(e.target.value));
+            filter(input.value);
+        })();
+    </script>
 </Layout>

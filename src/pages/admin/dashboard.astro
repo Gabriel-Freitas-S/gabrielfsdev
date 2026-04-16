@@ -1,9 +1,7 @@
 ---
+import { env } from "cloudflare:workers";
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import { ensureCoreTables } from "../../utils/db";
-
-const runtime = Astro.locals.runtime;
-const env = runtime?.env;
 
 let xpCount = 0;
 let certCount = 0;

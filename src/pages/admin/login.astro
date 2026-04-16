@@ -1,4 +1,5 @@
 ---
+import { env } from "cloudflare:workers";
 import { z } from "zod";
 import Layout from "../../layouts/Layout.astro";
 import {
@@ -11,9 +12,6 @@ import {
     verifyPassword,
     verifyTOTP,
 } from "../../utils/auth";
-
-const runtime = Astro.locals.runtime;
-const env = runtime?.env;
 const twoFactorSecret = await getTwoFactorSecret(env);
 const hasTwoFactor = Boolean(twoFactorSecret);
 

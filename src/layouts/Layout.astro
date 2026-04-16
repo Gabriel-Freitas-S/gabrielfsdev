@@ -1,6 +1,8 @@
 ---
+import { env } from "cloudflare:workers";
 import "../styles/global.css";
 import { ensureCoreTables } from "../utils/db";
+import { ClientRouter } from "astro:transitions";
 
 interface Props {
 	title: string;
@@ -8,8 +10,6 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
-const runtime = Astro.locals.runtime;
-const env = runtime?.env;
 
 const socialDefaults = {
 	linkedin_url: "https://www.linkedin.com/in/gabrielfsdev",
@@ -55,11 +55,17 @@ const githubUrl = socialLinks.github_url?.trim() || "";
 		<link rel="dns-prefetch" href="https://fonts.googleapis.com" />
 		<!-- Inter font with display=swap for better FCP -->
 		<link
+			rel="preload"
+			href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap"
+			as="style"
+		/>
+		<link
 			href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap"
 			rel="stylesheet"
 		/>
 		<title>{title}</title>
-		<script is:inline>
+		<ClientRouter />
+		<script is:inline data-astro-rerun>
 			(() => {
 				const stored = localStorage.getItem("theme");
 				const prefersDark = window.matchMedia(
@@ -296,7 +302,7 @@ const githubUrl = socialLinks.github_url?.trim() || "";
 		<main id="main-content">
 			<slot />
 		</main>
-		<script is:inline>
+		<script is:inline data-astro-rerun>
 			(() => {
 				const html = document.documentElement;
 				const btn = document.getElementById("theme-toggle");

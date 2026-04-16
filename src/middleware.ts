@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { defineMiddleware } from "astro/middleware";
 import {
     SESSION_COOKIE,
@@ -15,6 +16,8 @@ const securityHeaders = {
     "X-XSS-Protection": "1; mode=block",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https://*; connect-src 'self';",
 };
 
 function addSecurityHeaders(response: Response): Response {
@@ -32,7 +35,6 @@ function addSecurityHeaders(response: Response): Response {
 export const onRequest = defineMiddleware(async (context, next) => {
     const { url, cookies, redirect, locals, request } = context;
     const pathname = url.pathname;
-    const env = locals.runtime?.env;
     const isAdminRoute = pathname.startsWith("/admin");
     const isLogin = pathname.startsWith("/admin/login");
     const isLogout = pathname.startsWith("/admin/logout");

@@ -1,10 +1,9 @@
 ---
+import { env } from "cloudflare:workers";
 import Layout from "../layouts/Layout.astro";
 import { legacyExperiences } from "../data/legacy";
 
 let experiences = [];
-const runtime = Astro.locals.runtime;
-const env = runtime?.env;
 
 function normalizeAchievements(raw: any): string[] {
     if (!raw) return [];

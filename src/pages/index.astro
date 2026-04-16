@@ -1,10 +1,8 @@
 ---
+import { env } from "cloudflare:workers";
 import Layout from "../layouts/Layout.astro";
 import { Image } from "astro:assets";
 import heroPlaceholder from "../assets/hero-placeholder.svg";
-
-const runtime = Astro.locals.runtime;
-const env = runtime?.env;
 const hasR2 = Boolean(env?.R2);
 
 const defaults = {

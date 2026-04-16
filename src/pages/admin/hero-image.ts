@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { ensureCoreTables } from "../../utils/db";
 
@@ -14,7 +15,6 @@ async function ensureTable(env: any) {
 // This endpoint is protected by the middleware's session check
 // No need for password verification - user is already authenticated
 export const POST: APIRoute = async ({ request, locals, redirect }) => {
-    const env = locals.runtime?.env;
 
     if (!env?.R2) {
         return new Response("R2 não configurado", { status: 500 });

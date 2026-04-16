@@ -8,9 +8,16 @@ import cloudflare from '@astrojs/cloudflare';
 
 // https://astro.build/config
 export default defineConfig({
+  prefetch: true,
   output: 'server',
   vite: {
-    plugins: [tailwindcss()]
+    plugins: [tailwindcss()],
+    optimizeDeps: {
+      exclude: ['cookie']
+    },
+    ssr: {
+      noExternal: ['cookie']
+    }
   },
 
   image: {
