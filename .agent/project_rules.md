@@ -32,3 +32,10 @@ if (env?.DB) {
 
 ## 🛡️ Segurança e Middlewares
 - Verifique e adicione sempre proteções como HTTP Headers customizados (`Strict-Transport-Security`, `Content-Security-Policy`) e controle das rotas base (`/admin`) nos Middlewares, mas evite invocar `locals.runtime` ao testar sessões no `middleware.ts`. Use a global import definition listada acima.
+
+## 🚦 Regra Obrigatória de Deploy (Agente)
+- **NUNCA** executar `wrangler deploy` diretamente quando estiver atuando como agente neste repositório.
+- Deploy padrão deve ser **sempre** via `npm run deploy` (alvo preview).
+- Para preview explícito: `npm run deploy:preview`.
+- Produção só pode ser usada quando o usuário pedir explicitamente e com autorização interativa: `npm run deploy:production`.
+- Se não houver pedido explícito do usuário para produção, tratar qualquer operação de deploy como preview.

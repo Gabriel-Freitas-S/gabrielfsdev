@@ -1,0 +1,282 @@
+---
+import { env } from "cloudflare:workers";
+import { z } from "zod";
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { verifyPassword } from "../../../utils/auth";
+import { ensureCoreTables } from "../../../utils/db";
+
+const { id } = Astro.params;
+const isNew = id === "new";
+
+let project: any = {
+    name: "",
+    custom_name: "",
+    custom_description: "",
+    description: "",
+    technologies: [],
+    topics: [],
+    is_active: 0,
+    order_position: 0,
+    is_private: 0,
+    github_url: "",
+    live_url: "",
+    stars: 0,
+};
+
+let errorMessage = "";
+let successMessage = "";
+
+const projectSchema = z.object({
+    custom_name: z.string().optional(),
+    custom_description: z.string().optional(),
+    is_active: z.string().transform((v) => (v === "on" ? 1 : 0)),
+    order_position: z.string().transform((v) => parseInt(v, 10) || 0),
+    password: z.string().min(8, "Senha obrigatória"),
+});
+
+await ensureCoreTables(env);
+
+if (Astro.request.method === "POST") {
+    try {
+        const formData = await Astro.request.formData();
+
+        const parsed = projectSchema.safeParse({
+            custom_name: formData.get("custom_name") ?? "",
+            custom_description: formData.get("custom_description") ?? "",
+            is_active: formData.get("is_active") ?? "off",
+            order_position: formData.get("order_position") ?? "0",
+            password: formData.get("password"),
+        });
+
+        if (!parsed.success) {
+            errorMessage =
+                parsed.error.issues[0]?.message ||
+                "Dados inválidos";
+        } else {
+            const passwordOk = await verifyPassword(
+                parsed.data.password,
+                env
+            );
+            if (!passwordOk) {
+                throw new Error("Senha incorreta");
+            }
+
+            if (!isNew) {
+                await env.DB.prepare(
+                    `UPDATE projects 
+                     SET custom_name = ?, custom_description = ?, is_active = ?, order_position = ?
+                     WHERE id = ?`
+                )
+                    .bind(
+                        parsed.data.custom_name || null,
+                        parsed.data.custom_description || null,
+                        parsed.data.is_active,
+                        parsed.data.order_position,
+                        id
+                    )
+                    .run();
+
+                successMessage = "Projeto atualizado com sucesso!";
+            }
+        }
+    } catch (e: any) {
+        errorMessage = errorMessage || e?.message || "Erro ao salvar";
+    }
+}
+
+if (!isNew && id) {
+    const result = await env.DB.prepare(
+        "SELECT * FROM projects WHERE id = ?"
+    )
+        .bind(id)
+        .first();
+
+    if (result) {
+        project = result as any;
+        project.technologies = JSON.parse(project.technologies || "[]");
+        project.topics = JSON.parse(project.topics || "[]");
+    }
+}
+---
+
+<AdminLayout title={isNew ? "Novo Projeto" : "Editar Projeto"}>
+    <h1 class="text-3xl font-bold mb-8">
+        {isNew ? "Novo Projeto" : `Editar: ${project.name}`}
+    </h1>
+
+    {errorMessage && (
+        <div class="mb-4 rounded bg-red-500/10 border border-red-500 text-red-200 p-3">
+            {errorMessage}
+        </div>
+    )}
+
+    {successMessage && (
+        <div class="mb-4 rounded bg-green-500/10 border border-green-500 text-green-200 p-3">
+            {successMessage}
+        </div>
+    )}
+
+    <form method="POST" data-require-auth class="max-w-3xl space-y-6">
+        {/* Dados do GitHub (read-only) */}
+        <div class="bg-slate-900 p-4 rounded border border-slate-700">
+            <h2 class="text-lg font-bold mb-4">Informações do GitHub</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-400 mb-1">
+                        Nome Original
+                    </label>
+                    <input
+                        type="text"
+                        value={project.name}
+                        disabled
+                        class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-slate-500"
+                    />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-400 mb-1">
+                        ⭐ Stars
+                    </label>
+                    <input
+                        type="text"
+                        value={project.stars}
+                        disabled
+                        class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-slate-500"
+                    />
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-400 mb-1">
+                    Descrição Original
+                </label>
+                <textarea
+                    disabled
+                    rows="3"
+                    class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-slate-500"
+                >
+{project.description}
+                </textarea>
+            </div>
+
+            <div class="mt-4">
+                <label class="block text-sm font-medium text-slate-400 mb-1">
+                    Tecnologias
+                </label>
+                <div class="flex flex-wrap gap-2">
+                    {project.technologies.map((tech: string) => (
+                        <span class="bg-slate-700 text-slate-300 text-sm px-3 py-1 rounded">
+                            {tech}
+                        </span>
+                    ))}
+                </div>
+            </div>
+        </div>
+
+        {/* Customização */}
+        <div class="bg-slate-900 p-4 rounded border border-slate-700">
+            <h2 class="text-lg font-bold mb-4">Personalização</h2>
+
+            <div>
+                <label class="block text-sm font-medium mb-1">
+                    Nome Customizado (deixe em branco para usar original)
+                </label>
+                <input
+                    type="text"
+                    name="custom_name"
+                    value={project.custom_name || ""}
+                    placeholder={project.name}
+                    class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+                />
+                <p class="text-xs text-slate-400 mt-1">
+                    {project.custom_name ? "Usando customizado" : "Usando nome original"}
+                </p>
+            </div>
+
+            <div class="mt-4">
+                <label class="block text-sm font-medium mb-1">
+                    Descrição Customizada (deixe em branco para usar original)
+                </label>
+                <textarea
+                    name="custom_description"
+                    rows="3"
+                    placeholder={project.description}
+                    class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+                >
+{project.custom_description || ""}
+                </textarea>
+            </div>
+        </div>
+
+        {/* Controles */}
+        <div class="bg-slate-900 p-4 rounded border border-slate-700 space-y-4">
+            <div>
+                <label class="flex items-center gap-2">
+                    <input
+                        type="checkbox"
+                        name="is_active"
+                        checked={project.is_active}
+                        class="w-4 h-4"
+                    />
+                    <span class="font-medium">
+                        Ativar para exibição no site
+                    </span>
+                </label>
+                <p class="text-xs text-slate-400 mt-1">
+                    Projetos inativos não aparecem em /projetos
+                </p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-1">
+                    Posição na Listagem (maior = mais acima)
+                </label>
+                <input
+                    type="number"
+                    name="order_position"
+                    value={project.order_position}
+                    class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+                />
+                <p class="text-xs text-slate-400 mt-1">
+                    Projetos são ordenados por posição (desc) depois por data de atualização
+                </p>
+            </div>
+        </div>
+
+        {/* Info */}
+        {!isNew && (
+            <div class="bg-slate-900 p-4 rounded border border-slate-700 text-sm text-slate-400">
+                <p>🔒 Privado: {project.is_private ? "Sim" : "Não"}</p>
+                <p>
+                    📅 Última atualização:{" "}
+                    {project.last_updated
+                        ? new Date(
+                              project.last_updated
+                          ).toLocaleDateString("pt-BR")
+                        : "N/A"}
+                </p>
+                <p>
+                    🔄 Sincronizado:{" "}
+                    {new Date(project.synced_at).toLocaleDateString(
+                        "pt-BR"
+                    )}
+                </p>
+            </div>
+        )}
+
+        <div class="flex gap-3">
+            <button
+                type="submit"
+                class="bg-purple-600 hover:bg-purple-500 px-6 py-2 rounded font-bold"
+            >
+                💾 Salvar
+            </button>
+            <a
+                href="/admin/projects"
+                class="bg-slate-700 hover:bg-slate-600 px-6 py-2 rounded font-bold"
+            >
+                ← Voltar
+            </a>
+        </div>
+    </form>
+</AdminLayout>

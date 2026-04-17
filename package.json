@@ -6,7 +6,10 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "deploy": "npm run deploy:preview",
+    "deploy:preview": "npm run build && node scripts/deploy-cloudflare.cjs preview",
+    "deploy:production": "npm run build && node scripts/deploy-cloudflare.cjs production"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^13.1.10",

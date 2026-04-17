@@ -1,0 +1,251 @@
+---
+import { env } from "cloudflare:workers";
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { ensureCoreTables } from "../../../utils/db";
+import { syncProjectsFromGitHub } from "../../../utils/github";
+
+await ensureCoreTables(env);
+
+function safeParseArray(value: string | null | undefined): string[] {
+    if (!value) return [];
+    try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
+let autoSynced = false;
+let autoSyncError = "";
+let manualSynced = false;
+let manualSyncError = "";
+let manualSyncedInserted = 0;
+let manualSyncedUpdated = 0;
+
+const requestSync = Astro.url.searchParams.get("sync") === "1";
+
+let { results: projects } = await env.DB.prepare(
+    "SELECT * FROM projects ORDER BY order_position DESC, last_updated DESC",
+).run();
+
+const existingCount = Number(projects?.length || 0);
+if (requestSync) {
+    const githubUsername = String(env?.GITHUB_USERNAME || "").trim();
+    const githubToken = String(env?.GITHUB_TOKEN_SECRET || env?.GITHUB_TOKEN || "").trim();
+
+    if (githubUsername && githubToken) {
+        const syncResult = await syncProjectsFromGitHub(env, githubUsername, githubToken);
+        if (!syncResult.error) {
+            manualSynced = true;
+            manualSyncedInserted = syncResult.inserted;
+            manualSyncedUpdated = syncResult.updated;
+            const refreshed = await env.DB.prepare(
+                "SELECT * FROM projects ORDER BY order_position DESC, last_updated DESC",
+            ).run();
+            projects = refreshed.results;
+        } else {
+            manualSyncError = syncResult.error;
+        }
+    } else {
+        manualSyncError = "Credenciais do GitHub não configuradas para sync manual.";
+    }
+} else if (existingCount === 0) {
+    const githubUsername = String(env?.GITHUB_USERNAME || "").trim();
+    const githubToken = String(env?.GITHUB_TOKEN_SECRET || env?.GITHUB_TOKEN || "").trim();
+
+    if (githubUsername && githubToken) {
+        const syncResult = await syncProjectsFromGitHub(env, githubUsername, githubToken);
+        if (!syncResult.error) {
+            autoSynced = true;
+            const refreshed = await env.DB.prepare(
+                "SELECT * FROM projects ORDER BY order_position DESC, last_updated DESC",
+            ).run();
+            projects = refreshed.results;
+        } else {
+            autoSyncError = syncResult.error;
+        }
+    } else {
+        autoSyncError = "Credenciais do GitHub não configuradas para sync automático.";
+    }
+}
+
+interface Project {
+    id: number;
+    github_repo_id: number;
+    name: string;
+    description: string;
+    technologies: string;
+    is_private: number;
+    github_url: string;
+    live_url: string | null;
+    homepage: string | null;
+    stars: number;
+    topics: string;
+    last_updated: string | null;
+    synced_at: string;
+    is_active: number;
+    custom_name: string | null;
+    custom_description: string | null;
+    order_position: number;
+    created_at: string;
+}
+
+const projectList = (projects || []) as Project[];
+
+// Parse JSON fields
+const parsedProjects = projectList.map((p) => ({
+    ...p,
+    technologies: safeParseArray(p.technologies),
+    topics: safeParseArray(p.topics),
+}));
+
+const synced = Astro.url.searchParams.get("synced");
+const syncedInserted = Astro.url.searchParams.get("inserted");
+const syncedUpdated = Astro.url.searchParams.get("updated");
+const deleted = Astro.url.searchParams.get("deleted");
+const syncError = Astro.url.searchParams.get("error");
+const syncErrorMessage = Astro.url.searchParams.get("message");
+---
+
+<AdminLayout title="Projetos">
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-bold">Projetos</h1>
+        <a
+            href="/admin/projects?sync=1"
+            class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded font-bold"
+        >
+            🔄 Sincronizar GitHub
+        </a>
+    </div>
+
+    {manualSynced && (
+        <div class="mb-6 rounded bg-green-500/10 border border-green-500 text-green-200 p-4">
+            ✅ Sincronização manual concluída: {manualSyncedInserted} novos, {manualSyncedUpdated} atualizados
+        </div>
+    )}
+
+    {synced && (
+        <div class="mb-6 rounded bg-green-500/10 border border-green-500 text-green-200 p-4">
+            ✅ Sincronização concluída: {syncedInserted} novos, {syncedUpdated} atualizados
+        </div>
+    )}
+
+    {deleted && (
+        <div class="mb-6 rounded bg-green-500/10 border border-green-500 text-green-200 p-4">
+            ✅ Projeto removido com sucesso
+        </div>
+    )}
+
+    {autoSynced && (
+        <div class="mb-6 rounded bg-blue-500/10 border border-blue-500 text-blue-200 p-4">
+            ℹ️ Lista vazia detectada: sincronização automática executada com sucesso.
+        </div>
+    )}
+
+    {(syncError || autoSyncError || manualSyncError) && (
+        <div class="mb-6 rounded bg-red-500/10 border border-red-500 text-red-200 p-4">
+            ❌ Erro de sincronização: {syncErrorMessage || manualSyncError || autoSyncError || syncError}
+        </div>
+    )}
+
+    {parsedProjects.length === 0 ? (
+        <div class="bg-slate-800 p-8 rounded-xl border border-slate-700 text-center text-slate-400">
+            <p class="mb-4">Nenhum projeto sincronizado</p>
+            <p class="text-sm">Clique em "Sincronizar GitHub" para buscar seus repositórios</p>
+        </div>
+    ) : (
+        <div class="space-y-4">
+            {parsedProjects.map((project) => (
+                <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 hover:border-slate-600 transition">
+                    <div class="flex justify-between items-start gap-4">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-2">
+                                <h3 class="text-xl font-bold">
+                                    {project.custom_name || project.name}
+                                </h3>
+                                <div class="flex gap-2">
+                                    {project.is_active && (
+                                        <span class="bg-green-600/30 text-green-400 text-xs px-2 py-1 rounded">
+                                            Ativo
+                                        </span>
+                                    )}
+                                    {!project.is_active && (
+                                        <span class="bg-gray-600/30 text-gray-400 text-xs px-2 py-1 rounded">
+                                            Inativo
+                                        </span>
+                                    )}
+                                    {project.is_private && (
+                                        <span class="bg-purple-600/30 text-purple-400 text-xs px-2 py-1 rounded">
+                                            🔒 Privado
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <p class="text-sm text-slate-300 mb-3">
+                                {project.custom_description || project.description}
+                            </p>
+
+                            <div class="flex flex-wrap gap-2 mb-3">
+                                {project.technologies.map((tech) => (
+                                    <span class="bg-slate-700 text-slate-300 text-xs px-2 py-1 rounded">
+                                        {tech}
+                                    </span>
+                                ))}
+                            </div>
+
+                            <div class="flex gap-4 text-xs text-slate-400">
+                                <span>⭐ {project.stars} stars</span>
+                                {project.last_updated && (
+                                    <span>
+                                        Atualizado:{" "}
+                                        {new Date(project.last_updated).toLocaleDateString("pt-BR")}
+                                    </span>
+                                )}
+                            </div>
+
+                            {project.topics.length > 0 && (
+                                <div class="mt-2 flex flex-wrap gap-1">
+                                    {project.topics.slice(0, 5).map((topic) => (
+                                        <span class="text-xs bg-slate-700/50 text-slate-400 px-1.5 py-0.5 rounded">
+                                            #{topic}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div class="flex flex-col gap-2">
+                            <a
+                                href={`/admin/projects/${project.id}`}
+                                class="bg-purple-600 hover:bg-purple-500 px-3 py-2 rounded font-bold text-sm"
+                            >
+                                ✏️ Editar
+                            </a>
+                            {!project.is_private && (
+                                <a
+                                    href={project.github_url}
+                                    target="_blank"
+                                    class="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded text-sm text-center"
+                                >
+                                    🔗 GitHub
+                                </a>
+                            )}
+                            <form method="POST" action="/admin/projects/delete" class="contents">
+                                <input type="hidden" name="id" value={project.id} />
+                                <button
+                                    type="submit"
+                                    data-require-auth
+                                    class="bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 px-3 py-2 rounded text-sm"
+                                >
+                                    🗑️ Remover
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    )}
+</AdminLayout>

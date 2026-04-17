@@ -45,6 +45,29 @@ CREATE TABLE site_content (
     value TEXT NOT NULL
 );
 
+-- Projetos do GitHub
+DROP TABLE IF EXISTS projects;
+CREATE TABLE projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    github_repo_id INTEGER NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    description TEXT,
+    technologies TEXT DEFAULT '[]',
+    is_private INTEGER DEFAULT 0,
+    github_url TEXT NOT NULL,
+    live_url TEXT,
+    homepage TEXT,
+    stars INTEGER DEFAULT 0,
+    topics TEXT DEFAULT '[]',
+    last_updated TEXT,
+    synced_at TEXT,
+    is_active INTEGER DEFAULT 0,
+    custom_name TEXT,
+    custom_description TEXT,
+    order_position INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Dados importados do projeto legado (site-astro)
 INSERT INTO experiences (company, role, start_date, end_date, description, achievements) VALUES
 ('Seatrium Aracruz', 'Auxiliar de Infraestrutura', '2023-10-01', '2025-02-01', 'Durante minha atuação na empresa, tive a oportunidade de participar ativamente em um projeto mobile de grande relevância. Minha contribuição abrangeu diversas etapas do processo, desde o levantamento de requisitos junto aos stakeholders até a prototipagem no Figma. Além disso, estive envolvido no desenvolvimento do aplicativo e na prestação de suporte pós-lançamento. Esta experiência multifacetada me permitiu aprimorar minhas habilidades técnicas e de comunicação, além de proporcionar uma visão abrangente do ciclo de vida de um projeto de software. O trabalho em estreita colaboração com diferentes equipes e stakeholders foi fundamental para o sucesso do projeto e para meu crescimento profissional.', '["Participação em um projeto mobile de grande relevância","Levantamento de requisitos junto aos stakeholders","Prototipagem no Figma","Desenvolvimento do aplicativo","Prestação de suporte pós-lançamento","Aprimoramento de habilidades técnicas e de comunicação","Colaboração com diferentes equipes e stakeholders","Visão abrangente do ciclo de vida de um projeto de software"]'),

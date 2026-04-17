@@ -18,6 +18,9 @@ export async function ensureCoreTables(env: any) {
         env.DB.prepare(
             "CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
         ),
+        env.DB.prepare(
+            "CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY AUTOINCREMENT, github_repo_id INTEGER NOT NULL UNIQUE, name TEXT NOT NULL, description TEXT, technologies TEXT DEFAULT '[]', is_private INTEGER DEFAULT 0, github_url TEXT NOT NULL, live_url TEXT, homepage TEXT, stars INTEGER DEFAULT 0, topics TEXT DEFAULT '[]', last_updated TEXT, synced_at TEXT, is_active INTEGER DEFAULT 0, custom_name TEXT, custom_description TEXT, order_position INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP)",
+        ),
     ]);
 
     // Safe migration for older databases.
@@ -97,6 +100,61 @@ export async function ensureCoreTables(env: any) {
          WHERE track_id IS NULL
              AND TRIM(COALESCE(group_name, '')) <> ''`,
     ).run();
+
+    // Migrations for projects table
+    const projectsPragma = await env.DB.prepare("PRAGMA table_info(projects)").run();
+    const projectColumns = new Set((projectsPragma.results || []).map((col: any) => col.name));
+    if (!projectColumns.has("github_repo_id")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN github_repo_id INTEGER").run();
+    }
+    if (!projectColumns.has("name")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN name TEXT").run();
+    }
+    if (!projectColumns.has("description")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN description TEXT").run();
+    }
+    if (!projectColumns.has("technologies")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN technologies TEXT DEFAULT '[]'").run();
+    }
+    if (!projectColumns.has("is_private")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN is_private INTEGER DEFAULT 0").run();
+    }
+    if (!projectColumns.has("github_url")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN github_url TEXT").run();
+    }
+    if (!projectColumns.has("live_url")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN live_url TEXT").run();
+    }
+    if (!projectColumns.has("homepage")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN homepage TEXT").run();
+    }
+    if (!projectColumns.has("stars")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN stars INTEGER DEFAULT 0").run();
+    }
+    if (!projectColumns.has("topics")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN topics TEXT DEFAULT '[]'").run();
+    }
+    if (!projectColumns.has("last_updated")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN last_updated TEXT").run();
+    }
+    if (!projectColumns.has("synced_at")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN synced_at TEXT").run();
+    }
+    if (!projectColumns.has("is_active")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN is_active INTEGER DEFAULT 0").run();
+    }
+    if (!projectColumns.has("custom_name")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN custom_name TEXT").run();
+    }
+    if (!projectColumns.has("custom_description")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN custom_description TEXT").run();
+    }
+    if (!projectColumns.has("order_position")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN order_position INTEGER DEFAULT 0").run();
+    }
+    if (!projectColumns.has("created_at")) {
+        await env.DB.prepare("ALTER TABLE projects ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP").run();
+    }
 }
 
 export async function seedExperiencesIfEmpty(env: any) {

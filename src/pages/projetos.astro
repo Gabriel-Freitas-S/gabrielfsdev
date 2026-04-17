@@ -1,0 +1,230 @@
+---
+import { env } from "cloudflare:workers";
+import Layout from "../layouts/Layout.astro";
+import { ensureCoreTables } from "../utils/db";
+
+await ensureCoreTables(env);
+
+const { results: projects } = await env.DB.prepare(
+    "SELECT * FROM projects WHERE is_active = 1 ORDER BY order_position DESC, last_updated DESC"
+).run();
+
+interface Project {
+    id: number;
+    name: string;
+    description: string;
+    technologies: string;
+    is_private: number;
+    github_url: string;
+    live_url: string | null;
+    homepage: string | null;
+    stars: number;
+    topics: string;
+    last_updated: string | null;
+    custom_name: string | null;
+    custom_description: string | null;
+}
+
+const projectList = (projects || []) as Project[];
+
+// Parse JSON fields and prepare for display
+const parsedProjects = projectList.map((p) => ({
+    ...p,
+    displayName: p.custom_name || p.name,
+    displayDescription: p.custom_description || p.description,
+    technologies: JSON.parse(p.technologies || "[]") as string[],
+    topics: JSON.parse(p.topics || "[]") as string[],
+}));
+
+// Get unique technologies for filtering
+const allTechs = new Set<string>();
+parsedProjects.forEach((p) => {
+    p.technologies.forEach((t) => allTechs.add(t));
+});
+const uniqueTechs = Array.from(allTechs).sort();
+---
+
+<Layout title="Projetos - Gabriel Freitas Souza" description="Conheça os projetos de Gabriel Freitas Souza">
+    <main class="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+        <h1 class="text-3xl sm:text-4xl font-bold mb-3 text-center">Projetos</h1>
+        <p class="text-center text-muted mb-2">
+            Explorar repositórios e projetos que criei, incluindo desenvolvimento
+            full-stack, utilitários e contribuições open-source.
+        </p>
+        <p class="text-center text-sm text-muted mb-10">
+            {parsedProjects.length} projetos • {uniqueTechs.length} tecnologias mapeadas
+        </p>
+
+        <div class="mb-6 flex flex-wrap items-center justify-center gap-2" id="projects-filters">
+            <button
+                type="button"
+                class="project-filter-btn rounded-full border border-[color:var(--border)] px-4 py-2 text-sm"
+                data-filter="all"
+            >
+                Todos ({parsedProjects.length})
+            </button>
+            {uniqueTechs.map((tech) => {
+                const count = parsedProjects.filter((p) =>
+                    p.technologies.includes(tech)
+                ).length;
+                return (
+                    <button
+                        type="button"
+                        class="project-filter-btn rounded-full border border-[color:var(--border)] px-4 py-2 text-sm"
+                        data-filter={tech}
+                    >
+                        {tech} ({count})
+                    </button>
+                );
+            })}
+        </div>
+
+        {parsedProjects.length === 0 ? (
+            <div class="text-center py-20 text-muted">
+                Nenhum projeto disponível no momento.
+            </div>
+        ) : (
+            <div id="projects-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {parsedProjects.map((project) => (
+                    <article
+                        class="project-card card overflow-hidden hover:-translate-y-1 transition"
+                        data-techs={project.technologies.join(",")}
+                    >
+                        <div class="surface-soft p-6 border-b border-[color:var(--border)]">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <h2 class="text-xl font-semibold leading-snug">
+                                    {project.displayName}
+                                </h2>
+                                {project.is_private ? (
+                                    <span class="badge">Privado</span>
+                                ) : (
+                                    <span class="badge">Publico</span>
+                                )}
+                            </div>
+                        </div>
+
+                        <div class="p-6 space-y-4">
+                            <p class="text-sm text-muted leading-relaxed">
+                                {project.displayDescription || "Sem descrição informada."}
+                            </p>
+
+                            {project.technologies.length > 0 && (
+                                <div class="flex flex-wrap gap-2">
+                                    {project.technologies.map((tech) => (
+                                        <span class="rounded-full border border-[color:var(--border)] px-3 py-1 text-xs text-muted">
+                                            {tech}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+
+                            {project.topics.length > 0 && (
+                                <div class="flex flex-wrap gap-2">
+                                    {project.topics.slice(0, 4).map((topic) => (
+                                        <span class="text-xs text-[color:var(--accent)]">#{topic}</span>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div class="flex flex-wrap items-center justify-between gap-2 border-t border-[color:var(--border)] pt-3 text-xs text-muted">
+                                <span>⭐ {project.stars} stars</span>
+                                <span>
+                                    Atualizado: {project.last_updated
+                                        ? new Date(project.last_updated).toLocaleDateString("pt-BR")
+                                        : "N/A"}
+                                </span>
+                            </div>
+
+                            <div class="flex flex-wrap gap-3 pt-1">
+                                {!project.is_private && (
+                                    <a
+                                        href={project.github_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="rounded-md border border-[color:var(--accent)] px-3 py-2 text-sm text-[color:var(--accent)] hover:bg-[color:var(--accent)]/10"
+                                    >
+                                        Abrir GitHub ↗
+                                    </a>
+                                )}
+                                {project.live_url && (
+                                    <a
+                                        href={project.live_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="rounded-md border border-[color:var(--border)] px-3 py-2 text-sm text-[color:var(--text)] hover:bg-[color:var(--surface-2)]"
+                                    >
+                                        Ver projeto ao vivo ↗
+                                    </a>
+                                )}
+                                {!project.live_url && project.is_private && (
+                                    <span class="rounded-md border border-[color:var(--border)] px-3 py-2 text-sm text-muted">
+                                        Sem link publico
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </article>
+                ))}
+            </div>
+        )}
+
+        <div class="mt-10 text-center text-sm text-muted">
+            Mais projetos em
+            <a
+                href="https://github.com/Gabriel-Freitas-S"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-[color:var(--accent)] hover:underline"
+            >
+                github.com/Gabriel-Freitas-S
+            </a>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener("astro:page-load", () => {
+            const filterBtns = document.querySelectorAll<HTMLButtonElement>(
+                ".project-filter-btn",
+            );
+            const cards = document.querySelectorAll<HTMLElement>(".project-card");
+
+            const updateFilterStyles = () => {
+                filterBtns.forEach((button) => {
+                    const selected = button.classList.contains("active");
+                    button.classList.toggle("bg-[color:var(--accent)]", selected);
+                    button.classList.toggle("text-white", selected);
+                    button.classList.toggle("border-[color:var(--accent)]", selected);
+                });
+            };
+
+            const firstButton = filterBtns[0];
+            if (firstButton) {
+                firstButton.classList.add("active");
+                updateFilterStyles();
+            }
+
+            filterBtns.forEach((btn) => {
+                btn.addEventListener("click", () => {
+                    filterBtns.forEach((b) => b.classList.remove("active"));
+                    btn.classList.add("active");
+                    updateFilterStyles();
+
+                    const filterValue = btn.dataset.filter || "all";
+
+                    cards.forEach((card) => {
+                        if (filterValue === "all") {
+                            card.classList.remove("hidden");
+                        } else {
+                            const techs = (card.dataset.techs || "").split(",");
+                            if (techs.includes(filterValue)) {
+                                card.classList.remove("hidden");
+                            } else {
+                                card.classList.add("hidden");
+                            }
+                        }
+                    });
+                });
+            });
+        });
+    </script>
+</Layout>

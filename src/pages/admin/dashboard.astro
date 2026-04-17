@@ -6,6 +6,7 @@ import { ensureCoreTables } from "../../utils/db";
 let xpCount = 0;
 let certCount = 0;
 let trackCount = 0;
+let projectCount = 0;
 
 try {
     if (env?.DB) {
@@ -19,9 +20,13 @@ try {
         const { results: tracks } = await env.DB.prepare(
             "SELECT COUNT(*) as count FROM certification_tracks",
         ).run();
+        const { results: projects } = await env.DB.prepare(
+            "SELECT COUNT(*) as count FROM projects",
+        ).run();
         xpCount = experiences?.[0]?.count ?? 0;
         certCount = certifications?.[0]?.count ?? 0;
         trackCount = tracks?.[0]?.count ?? 0;
+        projectCount = projects?.[0]?.count ?? 0;
     }
 } catch (e) {
     console.error("Erro ao carregar contagens", e);
@@ -31,7 +36,7 @@ try {
 <AdminLayout title="Dashboard">
     <h1 class="text-3xl font-bold mb-8">Dashboard</h1>
 
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
         <a
             href="/admin/experiences"
             class="bg-slate-800 p-6 rounded-xl border border-slate-700 hover:border-blue-500 transition group"
@@ -76,6 +81,18 @@ try {
             <p class="text-4xl font-bold mt-2 text-amber-400">{trackCount}</p>
             <span
                 class="text-sm text-slate-500 group-hover:text-amber-300 mt-4 block"
+                >Gerenciar &rarr;</span
+            >
+        </a>
+
+        <a
+            href="/admin/projects"
+            class="bg-slate-800 p-6 rounded-xl border border-slate-700 hover:border-cyan-500 transition group"
+        >
+            <h3 class="text-xl font-semibold text-slate-400">Projetos</h3>
+            <p class="text-4xl font-bold mt-2 text-cyan-400">{projectCount}</p>
+            <span
+                class="text-sm text-slate-500 group-hover:text-cyan-300 mt-4 block"
                 >Gerenciar &rarr;</span
             >
         </a>

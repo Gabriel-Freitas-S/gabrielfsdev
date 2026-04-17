@@ -1,23 +1,57 @@
-name = "gabrielfsdev"
+name = "gabrielfsdev-preview"
 compatibility_date = "2024-12-31"
 compatibility_flags = [ "nodejs_compat" ]
 
+[vars]
+GITHUB_USERNAME = "Gabriel-Freitas-S"
 
 [[d1_databases]]
+binding = "DB"
+database_name = "gabrielfs-dev-db"
+database_id = "ce8f3bb0-32ec-460c-a88c-863db8050287"
+preview_database_id = "ce8f3bb0-32ec-460c-a88c-863db8050287"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "gabrielfs-hero-preview"
+preview_bucket_name = "gabrielfs-hero-preview"
+
+[[kv_namespaces]]
+binding = "SESSION"
+id = "d292293a864e4bb8b6b7b338dac4f360"
+
+[env.production]
+name = "gabrielfsdev"
+compatibility_flags = [ "nodejs_compat" ]
+
+[env.production.vars]
+GITHUB_USERNAME = "Gabriel-Freitas-S"
+
+[[env.production.kv_namespaces]]
+binding = "SESSION"
+id = "9f9a3a7102f9479c92cd48305a8a576b"
+
+[[env.production.d1_databases]]
 binding = "DB"
 database_name = "gabrielfs-db"
 database_id = "9f42d962-194d-4ae6-ba4c-1ac69e5a7b3d"
 preview_database_id = "9f42d962-194d-4ae6-ba4c-1ac69e5a7b3d"
 
-[[r2_buckets]]
+[[env.production.r2_buckets]]
 binding = "R2"
 bucket_name = "gabrielfs-hero"
 preview_bucket_name = "gabrielfs-hero-preview"
 
-
 [env.preview]
 name = "gabrielfsdev-preview"
 compatibility_flags = [ "nodejs_compat" ]
+
+[env.preview.vars]
+GITHUB_USERNAME = "Gabriel-Freitas-S"
+
+[[env.preview.kv_namespaces]]
+binding = "SESSION"
+id = "d292293a864e4bb8b6b7b338dac4f360"
 
 [[env.preview.d1_databases]]
 binding = "DB"

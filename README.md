@@ -31,7 +31,9 @@ Portfólio com área admin para editar hero, experiências e certificações. Ro
 
 ## Deploy (Cloudflare)
 - Preencha IDs reais de D1/R2/KV em `wrangler.toml`
-- `npm run build` e `wrangler deploy`
+- Padrão seguro: `npm run deploy` (deploy em preview)
+- Preview explícito: `npm run deploy:preview`
+- Produção (somente com autorização explícita): `npm run deploy:production`
 
 ## Segurança
 - Senha admin hash SHA-256 em D1; cookie `admin_session` httpOnly + SameSite=Lax; `/admin/logout` limpa sessão
