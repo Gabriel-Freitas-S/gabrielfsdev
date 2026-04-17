@@ -20,6 +20,6 @@
     "wrangler": "^4.83.0"
   },
   "overrides": {
-    "cookie": "1.0.2",
+    "cookie": "1.0.2"
   }
 }
