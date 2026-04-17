@@ -51,12 +51,15 @@ try {
     if (dbResults.length) {
         mergedSource = dbResults.map((cert: any) => {
             const trackName = cert.track_name || cert.group_name || "Outros";
+            const normalizedGroup = String(trackName || "").trim().toLowerCase();
             return {
                 ...cert,
                 group_name: trackName,
                 track_url: cert.linked_track_url || cert.track_url || "",
                 track_hours: null,
-                has_track: Boolean(cert.track_id || cert.track_name || cert.linked_track_url || cert.track_url),
+                has_track:
+                    Boolean(cert.track_id || cert.track_name || cert.linked_track_url || cert.track_url) ||
+                    (normalizedGroup !== "" && normalizedGroup !== "outros"),
                 track_image_key: cert.track_image_key || "",
             };
         });
@@ -111,7 +114,12 @@ try {
                 ...cert,
                 track_hours: null,
                 track_url: cert.track_url || "",
-                has_track: Boolean(cert.track_url || cert.track_hours),
+                has_track: Boolean(
+                    cert.track_url ||
+                    cert.track_hours ||
+                    (String(cert.group_name || "").trim() &&
+                        String(cert.group_name || "").trim().toLowerCase() !== "outros"),
+                ),
             }));
 
         mergedSource = [...normalizedOfficial, ...extraCertifications];
@@ -160,7 +168,11 @@ try {
                 name: group,
                 trackHours: cert.track_hours ?? null,
                 trackUrl: cert.track_url || "",
-                hasTrack: Boolean(cert.track_hours || cert.track_url),
+                hasTrack: Boolean(
+                    cert.track_hours ||
+                    cert.track_url ||
+                    (String(group || "").trim() && String(group || "").trim().toLowerCase() !== "outros"),
+                ),
                 coverImageKey: cert.image_key || "",
                 hours: 0,
                 items: [],
@@ -193,9 +205,15 @@ const groups = Object.values(groupedCerts)
 const totalCourses = groups.reduce((acc: number, group: any) => acc + group.items.length, 0);
 const totalHours = groups.reduce((acc: number, group: any) => acc + (group.hours || 0), 0);
 const totalTrackGroups = groups.filter((group: any) => group.hasTrack).length;
-const totalStandaloneCourses = groups
-    .filter((group: any) => !group.hasTrack)
-    .reduce((acc: number, group: any) => acc + group.items.length, 0);
+const allCourses = groups
+    .flatMap((group: any) =>
+        group.items.map((cert: any) => ({
+            ...cert,
+            group_name: group.name,
+            has_track: group.hasTrack,
+        })),
+    )
+    .sort((a: any, b: any) => (b.date || "").localeCompare(a.date || ""));
 ---
 
 <Layout title="Certificações - Gabriel Freitas">
@@ -203,7 +221,7 @@ const totalStandaloneCourses = groups
         <h1 class="text-3xl sm:text-4xl font-bold mb-3 text-center">Certificações</h1>
         <p class="text-center text-muted mb-2">Cursos organizados no formato de trilhas da Alura.</p>
         <p class="text-center text-sm text-muted mb-10">
-            {groups.length} trilhas • {totalCourses} cursos • {totalHours}h acumuladas
+            {totalTrackGroups} trilhas • {totalCourses} cursos • {totalHours}h acumuladas
         </p>
         <div class="max-w-xl mx-auto mb-10">
             <label class="block text-sm font-medium text-muted mb-2" for="cert-search">
@@ -230,11 +248,11 @@ const totalStandaloneCourses = groups
                 class="cert-tab-btn rounded-full border border-[color:var(--border)] px-4 py-2 text-sm"
                 data-tab="courses"
             >
-                Cursos ({totalStandaloneCourses})
+                Cursos ({totalCourses})
             </button>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div id="tracks-view" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {
                 groups.map((group: any) => (
                     <div
@@ -310,6 +328,47 @@ const totalStandaloneCourses = groups
                 )
             }
         </div>
+
+        <div id="courses-view" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {
+                allCourses.map((cert: any) => (
+                    <article
+                        class="card overflow-hidden p-6 space-y-3 cert-course-card"
+                        data-title={cert.title}
+                        data-issuer={cert.issuer}
+                        data-group={cert.group_name}
+                    >
+                        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+                            <span>{cert.issuer}</span>
+                            <span>{new Date(cert.date).toLocaleDateString("pt-BR")}</span>
+                        </div>
+                        <h3 class="text-xl font-semibold leading-snug">{cert.title}</h3>
+                        <p class="text-xs text-muted">
+                            {cert.has_track ? `Trilha: ${cert.group_name}` : "Curso sem trilha"}
+                        </p>
+                        {cert.image_key && (
+                            <button
+                                type="button"
+                                class="cert-open-modal text-sm text-[color:var(--accent)] hover:underline"
+                                data-cert-title={cert.title}
+                                data-cert-link={cert.url || ""}
+                                data-cert-image={`/uploads/${cert.image_key}`}
+                            >
+                                Visualizar certificado
+                            </button>
+                        )}
+                    </article>
+                ))
+            }
+
+            {
+                allCourses.length === 0 && (
+                    <div class="col-span-full text-center py-20 text-muted">
+                        Nenhuma certificação encontrada.
+                    </div>
+                )
+            }
+        </div>
     </main>
 
     <div
@@ -364,9 +423,12 @@ const totalStandaloneCourses = groups
             const modalLink = document.getElementById('cert-modal-link');
             const modalClose = document.getElementById('cert-modal-close');
             const tabButtons = Array.from(document.querySelectorAll('.cert-tab-btn'));
-            const cards = Array.from(document.querySelectorAll('.cert-card'));
+            const tracksView = document.getElementById('tracks-view');
+            const coursesView = document.getElementById('courses-view');
+            const trackCards = Array.from(document.querySelectorAll('.cert-card'));
+            const courseCards = Array.from(document.querySelectorAll('.cert-course-card'));
 
-            const hasTrackCards = cards.some((card) => card.dataset.tab === 'tracks');
+            const hasTrackCards = trackCards.some((card) => card.dataset.tab === 'tracks');
             let activeTab = hasTrackCards ? 'tracks' : 'courses';
 
             const updateTabStyles = () => {
@@ -417,18 +479,34 @@ const totalStandaloneCourses = groups
 
             function filter(term) {
                 const query = (term || '').trim().toLowerCase();
-                items.forEach((item) => {
-                    const title = item.dataset.title?.toLowerCase() || '';
-                    const issuer = item.dataset.issuer?.toLowerCase() || '';
-                    const group = item.dataset.group?.toLowerCase() || '';
-                    const match = !query || title.includes(query) || issuer.includes(query) || group.includes(query);
-                    item.classList.toggle('hidden', !match);
-                });
+                if (activeTab === 'tracks') {
+                    tracksView?.classList.remove('hidden');
+                    coursesView?.classList.add('hidden');
 
-                document.querySelectorAll('.cert-card').forEach((card) => {
-                    const matchesTab = (card.dataset.tab || 'tracks') === activeTab;
-                    const visible = card.querySelectorAll('.cert-item:not(.hidden)').length > 0;
-                    card.classList.toggle('hidden', !visible || !matchesTab);
+                    items.forEach((item) => {
+                        const title = item.dataset.title?.toLowerCase() || '';
+                        const issuer = item.dataset.issuer?.toLowerCase() || '';
+                        const group = item.dataset.group?.toLowerCase() || '';
+                        const match = !query || title.includes(query) || issuer.includes(query) || group.includes(query);
+                        item.classList.toggle('hidden', !match);
+                    });
+
+                    trackCards.forEach((card) => {
+                        const matchesTrackTab = (card.dataset.tab || 'tracks') === 'tracks';
+                        const visible = card.querySelectorAll('.cert-item:not(.hidden)').length > 0;
+                        card.classList.toggle('hidden', !visible || !matchesTrackTab);
+                    });
+                    return;
+                }
+
+                tracksView?.classList.add('hidden');
+                coursesView?.classList.remove('hidden');
+                courseCards.forEach((card) => {
+                    const title = card.dataset.title?.toLowerCase() || '';
+                    const issuer = card.dataset.issuer?.toLowerCase() || '';
+                    const group = card.dataset.group?.toLowerCase() || '';
+                    const match = !query || title.includes(query) || issuer.includes(query) || group.includes(query);
+                    card.classList.toggle('hidden', !match);
                 });
             }
 
