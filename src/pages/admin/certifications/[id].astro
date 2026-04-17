@@ -7,6 +7,9 @@ import { ensureCoreTables } from "../../../utils/db";
 
 const { id } = Astro.params;
 const isNew = id === "new";
+const CERT_IMAGE_MAX_SIZE = 2 * 1024 * 1024;
+const CERT_IMAGE_ALLOWED_TYPE = "image/webp";
+const CERT_IMAGE_KEY_PREFIX = "certifications";
 
 let cert = {
     title: "",
@@ -14,10 +17,25 @@ let cert = {
     date: "",
     hours: 0,
     url: "",
+    track_id: "",
     group_name: "",
+    image_key: "",
+    image_mime: "",
+    image_size_bytes: 0,
+    image_updated_at: "",
 };
+let tracks: Array<{ id: number; name: string; url: string }> = [];
 
 let errorMessage = "";
+
+const getExistingImageKey = async (certId: string | number) => {
+    const current = await env.DB.prepare(
+        "SELECT image_key FROM certifications WHERE id = ?",
+    )
+        .bind(certId)
+        .first();
+    return String((current as any)?.image_key || "");
+};
 
 const certSchema = z.object({
     title: z.string().min(2, "Informe o título."),
@@ -31,27 +49,40 @@ const certSchema = z.object({
         .trim()
         .optional()
         .transform((v) => v || ""),
-    group_name: z
-        .string()
-        .trim()
-        .max(120)
-        .optional()
-        .transform((v) => v || ""),
+    track_id: z.preprocess(
+        (value) => {
+            const raw = String(value ?? "").trim();
+            if (!raw) return null;
+            const parsed = Number(raw);
+            return Number.isFinite(parsed) ? parsed : null;
+        },
+        z.number().int().positive().nullable(),
+    ),
     password: z.string().min(8, "Senha obrigatória."),
 });
+
+await ensureCoreTables(env);
+if (env?.DB) {
+    const tracksResult = await env.DB.prepare(
+        "SELECT id, name, url FROM certification_tracks ORDER BY name ASC",
+    ).run();
+    tracks = (tracksResult.results || []) as Array<{ id: number; name: string; url: string }>;
+}
 
 if (Astro.request.method === "POST") {
     try {
         await ensureAdminTables(env);
         await ensureCoreTables(env);
         const formData = await Astro.request.formData();
+        const file = formData.get("certificate_image");
+        const removeCurrentImage = formData.get("remove_current_image") === "on";
         const parsed = certSchema.safeParse({
             title: formData.get("title"),
             issuer: formData.get("issuer"),
             date: formData.get("date"),
             hours: formData.get("hours"),
             url: formData.get("url"),
-            group_name: formData.get("group_name"),
+            track_id: formData.get("track_id"),
             password: formData.get("password"),
         });
 
@@ -64,9 +95,27 @@ if (Astro.request.method === "POST") {
                 throw new Error("Senha incorreta. Somente ações autenticadas podem alterar dados.");
             }
 
+            let certId: string | number = id as string;
+            let trackName = "";
+            let trackUrl = "";
+            if (payload.track_id) {
+                const selectedTrack = await env.DB.prepare(
+                    "SELECT id, name, url FROM certification_tracks WHERE id = ?",
+                )
+                    .bind(payload.track_id)
+                    .first();
+
+                if (!selectedTrack) {
+                    throw new Error("Trilha selecionada não encontrada.");
+                }
+
+                trackName = String((selectedTrack as any).name || "");
+                trackUrl = String((selectedTrack as any).url || "");
+            }
+
             if (isNew) {
-                await env.DB.prepare(
-                    "INSERT INTO certifications (title, issuer, date, hours, url, group_name) VALUES (?, ?, ?, ?, ?, ?)",
+                const insertResult = await env.DB.prepare(
+                    "INSERT INTO certifications (title, issuer, date, hours, url, track_url, group_name, track_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 )
                     .bind(
                         payload.title,
@@ -74,12 +123,15 @@ if (Astro.request.method === "POST") {
                         payload.date,
                         payload.hours,
                         payload.url,
-                        payload.group_name,
+                        trackUrl,
+                        trackName,
+                        payload.track_id,
                     )
                     .run();
+                certId = insertResult.meta?.last_row_id as number;
             } else {
                 await env.DB.prepare(
-                    "UPDATE certifications SET title=?, issuer=?, date=?, hours=?, url=?, group_name=? WHERE id=?",
+                    "UPDATE certifications SET title=?, issuer=?, date=?, hours=?, url=?, track_url=?, group_name=?, track_id=? WHERE id=?",
                 )
                     .bind(
                         payload.title,
@@ -87,11 +139,58 @@ if (Astro.request.method === "POST") {
                         payload.date,
                         payload.hours,
                         payload.url,
-                        payload.group_name,
+                        trackUrl,
+                        trackName,
+                        payload.track_id,
                         id,
                     )
                     .run();
             }
+
+            if (removeCurrentImage) {
+                const currentImageKey = await getExistingImageKey(certId);
+                if (currentImageKey && env?.R2) {
+                    await env.R2.delete(currentImageKey);
+                }
+                await env.DB.prepare(
+                    "UPDATE certifications SET image_key = NULL, image_mime = NULL, image_size_bytes = NULL, image_updated_at = NULL WHERE id = ?",
+                )
+                    .bind(certId)
+                    .run();
+            }
+
+            if (file instanceof File && file.size > 0) {
+                if (!env?.R2) {
+                    throw new Error("R2 não configurado para upload de certificado.");
+                }
+                if (file.type !== CERT_IMAGE_ALLOWED_TYPE) {
+                    throw new Error("A imagem do certificado deve estar em WebP.");
+                }
+                if (file.size > CERT_IMAGE_MAX_SIZE) {
+                    throw new Error("A imagem otimizada excede 2MB.");
+                }
+
+                const previousImageKey = await getExistingImageKey(certId);
+                const key = `${CERT_IMAGE_KEY_PREFIX}/cert-${certId}-${Date.now()}.webp`;
+                const imageBuffer = await file.arrayBuffer();
+
+                await env.R2.put(key, imageBuffer, {
+                    httpMetadata: {
+                        contentType: CERT_IMAGE_ALLOWED_TYPE,
+                    },
+                });
+
+                await env.DB.prepare(
+                    "UPDATE certifications SET image_key = ?, image_mime = ?, image_size_bytes = ?, image_updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                )
+                    .bind(key, CERT_IMAGE_ALLOWED_TYPE, file.size, certId)
+                    .run();
+
+                if (previousImageKey && previousImageKey !== key) {
+                    await env.R2.delete(previousImageKey);
+                }
+            }
+
             return Astro.redirect("/admin/certifications");
         }
     } catch (e: any) {
@@ -122,7 +221,7 @@ if (!isNew && Astro.request.method === "GET") {
         </div>
     )}
 
-    <form method="POST" class="max-w-2xl space-y-6" data-require-auth>
+    <form method="POST" enctype="multipart/form-data" class="max-w-2xl space-y-6" data-require-auth>
         <div>
             <label class="block text-sm font-medium mb-1">Título</label>
             <input
@@ -171,20 +270,30 @@ if (!isNew && Astro.request.method === "GET") {
             </div>
             <div>
                 <label class="block text-sm font-medium mb-1"
-                    >Grupo (ex: CSS)</label
+                    >Trilha</label
                 >
-                <input
-                    type="text"
-                    name="group_name"
-                    value={cert.group_name}
-                    list="groups"
+                <select
+                    name="track_id"
                     class="w-full bg-slate-800 border border-slate-700 rounded p-2"
-                />
-                <datalist id="groups">
-                    <option value="Frontend"></option>
-                    <option value="Backend"></option>
-                    <option value="DevOps"></option>
-                </datalist>
+                >
+                    <option value="">Sem trilha</option>
+                    {
+                        tracks.map((track) => (
+                            <option
+                                value={track.id}
+                                selected={String(cert.track_id || "") === String(track.id)}
+                            >
+                                {track.name}
+                            </option>
+                        ))
+                    }
+                </select>
+                <a
+                    href="/admin/tracks"
+                    class="inline-block mt-2 text-xs text-blue-400 hover:underline"
+                >
+                    Gerenciar trilhas ↗
+                </a>
             </div>
         </div>
 
@@ -200,6 +309,45 @@ if (!isNew && Astro.request.method === "GET") {
             />
         </div>
 
+        <div class="space-y-3 rounded-lg border border-slate-700 p-4">
+            <h2 class="text-lg font-semibold">Imagem do certificado</h2>
+            {
+                !isNew && cert.image_key && (
+                    <div class="space-y-2">
+                        <img
+                            src={`/uploads/${cert.image_key}`}
+                            alt={`Imagem do certificado ${cert.title}`}
+                            class="w-full max-w-sm rounded border border-slate-700"
+                            loading="lazy"
+                        />
+                        <label class="inline-flex items-center gap-2 text-xs text-red-300">
+                            <input type="checkbox" name="remove_current_image" class="rounded" />
+                            Remover imagem atual ao salvar
+                        </label>
+                    </div>
+                )
+            }
+
+            <label class="block text-sm font-medium" for="certificate-image-input">
+                Upload de certificado (PDF, PNG, JPG ou WebP -> otimizado para .webp, até 2MB)
+            </label>
+            <input
+                type="file"
+                name="certificate_image"
+                accept="application/pdf,image/*"
+                id="certificate-image-input"
+                class="w-full text-sm"
+            />
+            <p id="certificate-image-status" class="text-xs text-slate-400">
+                O arquivo selecionado será convertido para WebP no navegador antes do upload.
+            </p>
+            <img
+                id="certificate-image-preview"
+                alt="Prévia da imagem otimizada"
+                class="hidden w-full max-w-sm rounded border border-slate-700"
+            />
+        </div>
+
         <div class="flex gap-4 pt-4">
             <button
                 class="bg-purple-600 hover:bg-purple-500 px-6 py-2 rounded font-bold transition"
@@ -212,4 +360,223 @@ if (!isNew && Astro.request.method === "GET") {
             >
         </div>
     </form>
+
+    <script is:inline data-astro-rerun>
+        (() => {
+            const input = document.getElementById("certificate-image-input");
+            const status = document.getElementById("certificate-image-status");
+            const preview = document.getElementById("certificate-image-preview");
+            if (!input || !status || !preview) return;
+
+            const MAX_DIMENSION = 1800;
+            const WEBP_QUALITY = 0.82;
+
+            const readImage = (file) =>
+                new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const img = new Image();
+                        img.onload = () => resolve(img);
+                        img.onerror = reject;
+                        img.src = String(reader.result || "");
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+
+            const trimSolidBorders = (canvas, threshold = 245) => {
+                const ctx = canvas.getContext("2d", { willReadFrequently: true });
+                if (!ctx) return canvas;
+
+                const { width, height } = canvas;
+                if (width <= 2 || height <= 2) return canvas;
+
+                const imageData = ctx.getImageData(0, 0, width, height);
+                const pixels = imageData.data;
+
+                const isLightPixel = (offset) => {
+                    const r = pixels[offset];
+                    const g = pixels[offset + 1];
+                    const b = pixels[offset + 2];
+                    const a = pixels[offset + 3];
+                    return a > 0 && r >= threshold && g >= threshold && b >= threshold;
+                };
+
+                const isRowMostlyLight = (y) => {
+                    let light = 0;
+                    for (let x = 0; x < width; x += 1) {
+                        const offset = (y * width + x) * 4;
+                        if (isLightPixel(offset)) light += 1;
+                    }
+                    return light / width >= 0.995;
+                };
+
+                const isColMostlyLight = (x, top, bottom) => {
+                    let light = 0;
+                    const total = bottom - top + 1;
+                    for (let y = top; y <= bottom; y += 1) {
+                        const offset = (y * width + x) * 4;
+                        if (isLightPixel(offset)) light += 1;
+                    }
+                    return total > 0 && light / total >= 0.995;
+                };
+
+                let top = 0;
+                while (top < height - 1 && isRowMostlyLight(top)) top += 1;
+
+                let bottom = height - 1;
+                while (bottom > top && isRowMostlyLight(bottom)) bottom -= 1;
+
+                let left = 0;
+                while (left < width - 1 && isColMostlyLight(left, top, bottom)) left += 1;
+
+                let right = width - 1;
+                while (right > left && isColMostlyLight(right, top, bottom)) right -= 1;
+
+                const croppedWidth = right - left + 1;
+                const croppedHeight = bottom - top + 1;
+                if (croppedWidth <= 0 || croppedHeight <= 0) return canvas;
+                if (croppedWidth === width && croppedHeight === height) return canvas;
+
+                const cropped = document.createElement("canvas");
+                cropped.width = croppedWidth;
+                cropped.height = croppedHeight;
+                const croppedCtx = cropped.getContext("2d");
+                if (!croppedCtx) return canvas;
+                croppedCtx.drawImage(canvas, left, top, croppedWidth, croppedHeight, 0, 0, croppedWidth, croppedHeight);
+                return cropped;
+            };
+
+            let cachedPdfJs = null;
+            const loadPdfJs = async () => {
+                if (cachedPdfJs) return cachedPdfJs;
+
+                const loadClassicScript = (src) =>
+                    new Promise((resolve, reject) => {
+                        const existing = document.querySelector(`script[data-pdfjs-src="${src}"]`);
+                        if (existing) {
+                            existing.addEventListener("load", () => resolve(window.pdfjsLib), { once: true });
+                            existing.addEventListener("error", reject, { once: true });
+                            if (window.pdfjsLib) resolve(window.pdfjsLib);
+                            return;
+                        }
+
+                        const script = document.createElement("script");
+                        script.src = src;
+                        script.async = true;
+                        script.dataset.pdfjsSrc = src;
+                        script.onload = () => resolve(window.pdfjsLib);
+                        script.onerror = reject;
+                        document.head.appendChild(script);
+                    });
+
+                try {
+                    const mod = await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.min.mjs");
+                    mod.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.worker.min.mjs";
+                    cachedPdfJs = mod;
+                    return cachedPdfJs;
+                } catch (moduleError) {
+                    const lib = await loadClassicScript("https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.min.js");
+                    if (!lib) throw moduleError;
+                    lib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.worker.min.js";
+                    cachedPdfJs = lib;
+                    return cachedPdfJs;
+                }
+            };
+
+            const readPdfFirstPage = async (file) => {
+                const pdfjsLib = await loadPdfJs();
+
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                const page = await pdf.getPage(1);
+
+                const baseViewport = page.getViewport({ scale: 1 });
+                const ratio = Math.min(1, MAX_DIMENSION / Math.max(baseViewport.width, baseViewport.height));
+                const viewport = page.getViewport({ scale: ratio });
+
+                const canvas = document.createElement("canvas");
+                const ctx = canvas.getContext("2d", { alpha: false });
+                if (!ctx) throw new Error("Não foi possível preparar canvas para PDF");
+
+                canvas.width = Math.max(1, Math.round(viewport.width));
+                canvas.height = Math.max(1, Math.round(viewport.height));
+
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                await page.render({ canvasContext: ctx, viewport }).promise;
+                return trimSolidBorders(canvas);
+            };
+
+            const renderImageToCanvas = async (file) => {
+                const image = await readImage(file);
+                const ratio = Math.min(1, MAX_DIMENSION / Math.max(image.width, image.height));
+                const width = Math.max(1, Math.round(image.width * ratio));
+                const height = Math.max(1, Math.round(image.height * ratio));
+
+                const canvas = document.createElement("canvas");
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext("2d");
+                if (!ctx) throw new Error("Não foi possível preparar canvas");
+                ctx.drawImage(image, 0, 0, width, height);
+                return canvas;
+            };
+
+            input.addEventListener("change", async () => {
+                const file = input.files?.[0];
+                if (!file) {
+                    preview.classList.add("hidden");
+                    status.textContent = "A imagem selecionada será convertida para WebP no navegador antes do upload.";
+                    return;
+                }
+
+                if (!(file.type === "application/pdf" || file.type.startsWith("image/"))) {
+                    input.value = "";
+                    status.textContent = "Arquivo inválido. Envie PDF, PNG, JPG ou WebP.";
+                    preview.classList.add("hidden");
+                    return;
+                }
+
+                try {
+                    status.textContent = "Otimizando imagem para WebP...";
+                    const canvas = file.type === "application/pdf"
+                        ? await readPdfFirstPage(file)
+                        : await renderImageToCanvas(file);
+
+                    const optimizedBlob = await new Promise((resolve, reject) => {
+                        canvas.toBlob(
+                            (blob) => (blob ? resolve(blob) : reject(new Error("Falha ao gerar WebP"))),
+                            "image/webp",
+                            WEBP_QUALITY,
+                        );
+                    });
+
+                    const optimizedFile = new File(
+                        [optimizedBlob],
+                        `${(file.name || "certificado").replace(/\.[^.]+$/u, "")}.webp`,
+                        { type: "image/webp" },
+                    );
+
+                    const dt = new DataTransfer();
+                    dt.items.add(optimizedFile);
+                    input.files = dt.files;
+
+                    preview.src = URL.createObjectURL(optimizedBlob);
+                    preview.classList.remove("hidden");
+
+                    const beforeKb = (file.size / 1024).toFixed(1);
+                    const afterKb = (optimizedFile.size / 1024).toFixed(1);
+                    const sourceType = file.type === "application/pdf" ? "PDF" : "imagem";
+                    status.textContent = `Otimizado (${sourceType}): ${beforeKb}KB -> ${afterKb}KB (WebP)`;
+                } catch (error) {
+                    console.error(error);
+                    input.value = "";
+                    preview.classList.add("hidden");
+                    status.textContent = "Não foi possível converter o arquivo para WebP. Verifique se o PDF não está protegido por senha e tente novamente.";
+                }
+            });
+        })();
+    </script>
 </AdminLayout>

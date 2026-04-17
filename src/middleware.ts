@@ -17,7 +17,7 @@ const securityHeaders = {
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https://*; connect-src 'self' https://cloudflareinsights.com;",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com https://cdn.jsdelivr.net; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://*; connect-src 'self' https://cloudflareinsights.com https://cdn.jsdelivr.net;",
 };
 
 function addSecurityHeaders(response: Response): Response {
@@ -38,10 +38,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
     // Redirect /favicon.ico → /favicon.svg (browsers request .ico automatically)
     if (pathname === "/favicon.ico") {
-        return new Response(null, {
-            status: 301,
-            headers: { Location: "/favicon.svg" },
-        });
+        return redirect("/favicon.svg", 301);
     }
 
     const isAdminRoute = pathname.startsWith("/admin");

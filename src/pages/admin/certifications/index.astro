@@ -6,26 +6,60 @@ import { ensureCoreTables, seedCertificationsIfEmpty } from "../../../utils/db";
 await ensureCoreTables(env);
 await seedCertificationsIfEmpty(env);
 const { results } = await env.DB.prepare(
-    "SELECT * FROM certifications ORDER BY date DESC",
+    `SELECT c.*, t.name as track_name
+     FROM certifications c
+     LEFT JOIN certification_tracks t ON t.id = c.track_id
+     ORDER BY c.date DESC`,
 ).run();
 ---
 
 <AdminLayout title="Certificações">
     <div class="flex justify-between items-center mb-8">
         <h1 class="text-3xl font-bold">Certificações</h1>
-        <a
-            href="/admin/certifications/new"
-            class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded font-bold transition"
-        >
-            + Nova Certificação
-        </a>
+        <div class="flex items-center gap-3">
+            <a
+                href="/admin/tracks"
+                class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded font-bold transition"
+            >
+                Trilhas
+            </a>
+            <a
+                href="/admin/certifications/new"
+                class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded font-bold transition"
+            >
+                + Nova Certificação
+            </a>
+        </div>
+    </div>
+
+    <div class="mb-6">
+        <input
+            id="admin-cert-search"
+            type="search"
+            placeholder="Buscar por titulo, emissor ou trilha"
+            class="w-full max-w-xl bg-slate-800 border border-slate-700 rounded p-2"
+        />
     </div>
 
     <div class="space-y-4">
         {
             results.map((cert: any) => (
-                <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 flex justify-between items-center">
-                    <div>
+                <div
+                    class="bg-slate-800 p-6 rounded-xl border border-slate-700 flex justify-between items-center admin-filter-card"
+                    data-search={`${cert.title || ""} ${cert.issuer || ""} ${cert.track_name || cert.group_name || ""}`.toLowerCase()}
+                >
+                    <div class="flex items-start gap-4">
+                        {
+                            cert.image_key && (
+                                <img
+                                    src={`/uploads/${cert.image_key}`}
+                                    alt={`Miniatura do certificado ${cert.title}`}
+                                    class="w-16 h-20 object-cover rounded border border-slate-700"
+                                    loading="lazy"
+                                />
+                            )
+                        }
+                        <div>
                         <h3 class="text-xl font-bold text-white">
                             {cert.title}
                         </h3>
@@ -33,11 +67,11 @@ const { results } = await env.DB.prepare(
                             <span>{cert.issuer}</span>
                             <span>•</span>
                             <span>{cert.hours}h</span>
-                            {cert.group_name && (
+                            {(cert.track_name || cert.group_name) && (
                                 <>
                                     <span>•</span>
                                     <span class="text-purple-400">
-                                        {cert.group_name}
+                                        {cert.track_name || cert.group_name}
                                     </span>
                                 </>
                             )}
@@ -51,6 +85,7 @@ const { results } = await env.DB.prepare(
                                 Credencial ↗
                             </a>
                         )}
+                        </div>
                     </div>
                     <div class="flex gap-3">
                         <a
@@ -75,4 +110,20 @@ const { results } = await env.DB.prepare(
             ))
         }
     </div>
+
+    <script is:inline data-astro-rerun>
+        (() => {
+            const input = document.getElementById("admin-cert-search");
+            if (!(input instanceof HTMLInputElement)) return;
+
+            const cards = Array.from(document.querySelectorAll(".admin-filter-card"));
+            input.addEventListener("input", () => {
+                const query = String(input.value || "").trim().toLowerCase();
+                cards.forEach((card) => {
+                    const text = card.getAttribute("data-search") || "";
+                    card.classList.toggle("hidden", Boolean(query) && !text.includes(query));
+                });
+            });
+        })();
+    </script>
 </AdminLayout>

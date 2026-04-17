@@ -10,6 +10,18 @@ CREATE TABLE experiences (
 );
 
 DROP TABLE IF EXISTS certifications;
+DROP TABLE IF EXISTS certification_tracks;
+
+CREATE TABLE certification_tracks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    url TEXT DEFAULT '',
+    image_key TEXT,
+    image_mime TEXT,
+    image_size_bytes INTEGER,
+    image_updated_at TEXT
+);
+
 CREATE TABLE certifications (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
@@ -17,7 +29,13 @@ CREATE TABLE certifications (
     date TEXT NOT NULL,
     hours INTEGER,
     url TEXT,
-    group_name TEXT -- To group related certs
+    image_key TEXT,
+    image_mime TEXT,
+    image_size_bytes INTEGER,
+    image_updated_at TEXT,
+    track_url TEXT DEFAULT '',
+    group_name TEXT, -- Legacy grouping field
+    track_id INTEGER
 );
 
 -- Textos gerenciáveis

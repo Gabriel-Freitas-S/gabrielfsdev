@@ -1,63 +1,74 @@
 ---
 import { env } from "cloudflare:workers";
 import AdminLayout from "../../../layouts/AdminLayout.astro";
-import { ensureCoreTables, seedExperiencesIfEmpty } from "../../../utils/db";
+import { ensureCoreTables } from "../../../utils/db";
 
 await ensureCoreTables(env);
-await seedExperiencesIfEmpty(env);
 const { results } = await env.DB.prepare(
-    "SELECT * FROM experiences ORDER BY start_date DESC",
+    `SELECT t.id, t.name, t.url, COUNT(c.id) as courses_count
+     FROM certification_tracks t
+     LEFT JOIN certifications c ON c.track_id = t.id
+     GROUP BY t.id, t.name, t.url
+     ORDER BY t.name ASC`,
 ).run();
 ---
 
-<AdminLayout title="Experiências">
+<AdminLayout title="Trilhas">
     <div class="flex justify-between items-center mb-8">
-        <h1 class="text-3xl font-bold">Experiências</h1>
+        <h1 class="text-3xl font-bold">Trilhas</h1>
         <a
-            href="/admin/experiences/new"
-            class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded font-bold transition"
+            href="/admin/tracks/new"
+            class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded font-bold transition"
         >
-            + Nova Experiência
+            + Nova Trilha
         </a>
     </div>
 
     <div class="mb-6">
         <input
-            id="admin-exp-search"
+            id="admin-track-search"
             type="search"
-            placeholder="Buscar por cargo, empresa ou periodo"
+            placeholder="Buscar por nome da trilha"
             class="w-full max-w-xl bg-slate-800 border border-slate-700 rounded p-2"
         />
     </div>
 
     <div class="space-y-4">
         {
-            results.map((xp: any) => (
+            results.map((track: any) => (
                 <div
-                    class="bg-slate-800 p-6 rounded-xl border border-slate-700 flex justify-between items-start admin-filter-card"
-                    data-search={`${xp.role || ""} ${xp.company || ""} ${xp.start_date || ""} ${xp.end_date || ""}`.toLowerCase()}
+                    class="bg-slate-800 p-6 rounded-xl border border-slate-700 flex justify-between items-center admin-filter-card"
+                    data-search={`${track.name || ""} ${(track.courses_count || 0)} cursos`.toLowerCase()}
                 >
                     <div>
-                        <h3 class="text-xl font-bold text-white">{xp.role}</h3>
-                        <p class="text-slate-400 font-medium">{xp.company}</p>
-                        <p class="text-sm text-slate-500 mt-1">
-                            {xp.start_date} - {xp.end_date || "Presente"}
-                        </p>
+                        <h3 class="text-xl font-bold text-white">{track.name}</h3>
+                        <div class="flex gap-2 text-sm text-slate-400 mt-1">
+                            <span>{track.courses_count || 0} cursos associados</span>
+                        </div>
+                        {track.url && (
+                            <a
+                                href={track.url}
+                                target="_blank"
+                                class="text-xs text-blue-400 hover:underline"
+                            >
+                                Certificado da trilha ↗
+                            </a>
+                        )}
                     </div>
                     <div class="flex gap-3">
                         <a
-                            href={`/admin/experiences/${xp.id}`}
+                            href={`/admin/tracks/${track.id}`}
                             class="text-blue-400 hover:text-blue-300"
                         >
                             Editar
                         </a>
                         <form
                             method="POST"
-                            action="/admin/experiences/delete"
+                            action="/admin/tracks/delete"
                             class="flex items-center gap-2"
                             data-require-auth
                         >
-                            <input type="hidden" name="id" value={xp.id} />
+                            <input type="hidden" name="id" value={track.id} />
                             <button class="text-red-400 hover:text-red-300">
                                 Excluir
                             </button>
@@ -66,19 +77,11 @@ const { results } = await env.DB.prepare(
                 </div>
             ))
         }
-
-        {
-            results.length === 0 && (
-                <p class="text-slate-500 text-center py-10">
-                    Nenhuma experiência cadastrada.
-                </p>
-            )
-        }
     </div>
 
     <script is:inline data-astro-rerun>
         (() => {
-            const input = document.getElementById("admin-exp-search");
+            const input = document.getElementById("admin-track-search");
             if (!(input instanceof HTMLInputElement)) return;
 
             const cards = Array.from(document.querySelectorAll(".admin-filter-card"));

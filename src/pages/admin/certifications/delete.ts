@@ -31,9 +31,18 @@ export const POST: APIRoute = async ({ request, locals, redirect }) => {
 	await ensureCoreTables(env);
 	await ensureAdminTables(env);
 	if (env?.DB) {
+		const cert = await env.DB.prepare("SELECT image_key FROM certifications WHERE id = ?")
+			.bind(parsed.data.id)
+			.first();
+
 		await env.DB.prepare("DELETE FROM certifications WHERE id = ?")
 			.bind(parsed.data.id)
 			.run();
+
+		const imageKey = String((cert as any)?.image_key || "");
+		if (imageKey && env?.R2) {
+			await env.R2.delete(imageKey);
+		}
 	}
 
 	return redirect("/admin/certifications");

@@ -2,51 +2,205 @@
 import { env } from "cloudflare:workers";
 import Layout from "../layouts/Layout.astro";
 import { legacyCertifications } from "../data/legacy";
+import { aluraTrackCertifications } from "../data/alura-tracks";
 
 let groupedCerts = {};
 
-try {
-    if (env?.DB) {
-        const { results } = await env.DB.prepare(
-            "SELECT * FROM certifications ORDER BY date DESC",
-        ).run();
+const normalizeText = (value: string) =>
+    (value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
 
-        // Group by group_name; if DB empty, fall back to legacy
-        const source = results.length ? results : legacyCertifications;
-        groupedCerts = source.reduce((acc: any, cert: any) => {
-            const group = cert.group_name || "Outros";
-            if (!acc[group]) acc[group] = { name: group, hours: 0, items: [] };
-            acc[group].items.push(cert);
-            acc[group].hours += cert.hours || 0;
-            return acc;
-        }, {});
-    } else {
-        groupedCerts = legacyCertifications.reduce((acc: any, cert: any) => {
-            const group = cert.group_name || "Outros";
-            if (!acc[group]) acc[group] = { name: group, hours: 0, items: [] };
-            acc[group].items.push(cert);
-            acc[group].hours += cert.hours || 0;
-            return acc;
-        }, {});
+const makeCourseKey = (groupName: string, title: string) =>
+    `${normalizeText(groupName)}::${normalizeText(title)}`;
+
+const buildOfficialCatalog = () => {
+    const byTitle = new Map<string, any>();
+    for (const cert of aluraTrackCertifications) {
+        const key = makeCourseKey(cert.group_name, cert.title);
+        const existing = byTitle.get(key);
+        if (
+            !existing ||
+            (cert.track_hours ?? 0) > (existing.track_hours ?? 0) ||
+            cert.date > existing.date
+        ) {
+            byTitle.set(key, cert);
+        }
     }
+    return Array.from(byTitle.values());
+};
+
+const officialCatalog = buildOfficialCatalog();
+
+try {
+    let dbResults: any[] = [];
+    if (env?.DB) {
+        const query = await env.DB.prepare(
+            `SELECT c.*, t.name as track_name, t.url as linked_track_url, t.image_key as track_image_key
+             FROM certifications c
+             LEFT JOIN certification_tracks t ON t.id = c.track_id
+             ORDER BY c.date DESC`,
+        ).run();
+        dbResults = query.results || [];
+    }
+
+    let mergedSource: any[] = [];
+
+    if (dbResults.length) {
+        mergedSource = dbResults.map((cert: any) => {
+            const trackName = cert.track_name || cert.group_name || "Outros";
+            return {
+                ...cert,
+                group_name: trackName,
+                track_url: cert.linked_track_url || cert.track_url || "",
+                track_hours: null,
+                has_track: Boolean(cert.track_id || cert.track_name || cert.linked_track_url || cert.track_url),
+                track_image_key: cert.track_image_key || "",
+            };
+        });
+    } else {
+        const sourceWithLinks = legacyCertifications;
+        const sourceByCourseKey = sourceWithLinks.reduce((acc: any, cert: any) => {
+            const key = makeCourseKey(cert.group_name || "", cert.title || "");
+            const keyByTitleOnly = normalizeText(cert.title || "");
+
+            if (!acc[key]) {
+                acc[key] = cert;
+            }
+
+            if (!acc[keyByTitleOnly]) {
+                acc[keyByTitleOnly] = cert;
+                return acc;
+            }
+
+            const currentHasUrl = Boolean(acc[keyByTitleOnly]?.url);
+            const incomingHasUrl = Boolean(cert?.url);
+            if (!currentHasUrl && incomingHasUrl) acc[keyByTitleOnly] = cert;
+            return acc;
+        }, {} as Record<string, any>);
+
+        const officialKeys = new Set(
+            officialCatalog.map((cert: any) => `${normalizeText(cert.group_name || "")}:${normalizeText(cert.title || "")}`),
+        );
+        const officialTitles = new Set(
+            officialCatalog.map((cert: any) => normalizeText(cert.title || "")),
+        );
+
+        const normalizedOfficial = officialCatalog.map((cert: any) => {
+            const key = makeCourseKey(cert.group_name || "", cert.title || "");
+            const dbCert = sourceByCourseKey[key] || sourceByCourseKey[normalizeText(cert.title || "")];
+            return {
+                ...cert,
+                issuer: dbCert?.issuer || cert.issuer,
+                url: dbCert?.url || cert.url,
+                track_url: dbCert?.track_url || cert.track_url || "",
+                has_track: true,
+            };
+        });
+
+        const extraCertifications = sourceWithLinks
+            .filter(
+                (cert: any) =>
+                    !officialKeys.has(
+                        `${normalizeText(cert.group_name || "")}:${normalizeText(cert.title || "")}`,
+                    ) && !officialTitles.has(normalizeText(cert.title || "")),
+            )
+            .map((cert: any) => ({
+                ...cert,
+                track_hours: null,
+                track_url: cert.track_url || "",
+                has_track: Boolean(cert.track_url || cert.track_hours),
+            }));
+
+        mergedSource = [...normalizedOfficial, ...extraCertifications];
+    }
+
+    groupedCerts = mergedSource.reduce((acc: any, cert: any) => {
+        const group = cert.group_name || "Outros";
+        if (!acc[group]) {
+            acc[group] = {
+                name: group,
+                trackHours: cert.track_hours ?? null,
+                trackUrl: cert.track_url || "",
+                hasTrack: Boolean(cert.has_track || cert.track_hours || cert.track_url),
+                coverImageKey: cert.track_image_key || cert.image_key || "",
+                hours: 0,
+                items: [],
+            };
+        }
+
+        if (!acc[group].trackHours && cert.track_hours) {
+            acc[group].trackHours = cert.track_hours;
+        }
+
+        if (!acc[group].trackUrl && cert.track_url) {
+            acc[group].trackUrl = cert.track_url;
+        }
+
+        if (!acc[group].coverImageKey && (cert.track_image_key || cert.image_key)) {
+            acc[group].coverImageKey = cert.track_image_key || cert.image_key;
+        }
+
+        if (!acc[group].hasTrack && cert.has_track) {
+            acc[group].hasTrack = true;
+        }
+
+        acc[group].items.push(cert);
+        acc[group].hours += cert.hours || 0;
+        return acc;
+    }, {});
 } catch (e) {
     console.error(e);
-    groupedCerts = legacyCertifications.reduce((acc: any, cert: any) => {
+    groupedCerts = officialCatalog.reduce((acc: any, cert: any) => {
         const group = cert.group_name || "Outros";
-        if (!acc[group]) acc[group] = { name: group, hours: 0, items: [] };
+        if (!acc[group]) {
+            acc[group] = {
+                name: group,
+                trackHours: cert.track_hours ?? null,
+                trackUrl: cert.track_url || "",
+                hasTrack: Boolean(cert.track_hours || cert.track_url),
+                coverImageKey: cert.image_key || "",
+                hours: 0,
+                items: [],
+            };
+        }
+
+        if (!acc[group].coverImageKey && cert.image_key) {
+            acc[group].coverImageKey = cert.image_key;
+        }
         acc[group].items.push(cert);
         acc[group].hours += cert.hours || 0;
         return acc;
     }, {});
 }
 
-const groups = Object.values(groupedCerts);
+const groups = Object.values(groupedCerts)
+    .map((group: any) => {
+        const sortedItems = group.items.sort((a: any, b: any) =>
+            (b.date || "").localeCompare(a.date || ""),
+        );
+        const firstItemWithImage = sortedItems.find((item: any) => Boolean(item?.image_key));
+        return {
+            ...group,
+            items: sortedItems,
+            coverImageKey: group.coverImageKey || firstItemWithImage?.image_key || "",
+        };
+    })
+    .sort((a: any, b: any) => b.hours - a.hours);
+
+const totalCourses = groups.reduce((acc: number, group: any) => acc + group.items.length, 0);
+const totalHours = groups.reduce((acc: number, group: any) => acc + (group.hours || 0), 0);
 ---
 
 <Layout title="Certificações - Gabriel Freitas">
     <main class="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
         <h1 class="text-3xl sm:text-4xl font-bold mb-3 text-center">Certificações</h1>
-        <p class="text-center text-muted mb-10">Explore meus cursos e certificados.</p>
+        <p class="text-center text-muted mb-2">Cursos organizados no formato de trilhas da Alura.</p>
+        <p class="text-center text-sm text-muted mb-10">
+            {groups.length} trilhas • {totalCourses} cursos • {totalHours}h acumuladas
+        </p>
         <div class="max-w-xl mx-auto mb-10">
             <label class="block text-sm font-medium text-muted mb-2" for="cert-search">
                 Buscar certificações
@@ -54,25 +208,44 @@ const groups = Object.values(groupedCerts);
             <input
                 id="cert-search"
                 type="search"
-                placeholder="Digite título, emissor ou grupo"
+                placeholder="Digite trilha, curso ou emissor"
                 class="w-full surface rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
             />
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {
                 groups.map((group: any) => (
                     <div class="card overflow-hidden hover:-translate-y-1 transition cert-card" data-group={group.name}>
-                        <div class="surface-soft p-6 border-b border-[color:var(--border)] flex justify-between items-center">
-                            <h2 class="text-lg font-bold">
-                                {group.name}
-                            </h2>
-                            <span class="badge">
-                                {group.hours}h
-                            </span>
+                        <div class="surface-soft p-6 border-b border-[color:var(--border)]">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <h2 class="text-lg font-bold leading-snug">
+                                    {group.name}
+                                </h2>
+                                <div class="flex items-center gap-2 text-xs">
+                                    <span class="badge">{group.hours}h concluidas</span>
+                                </div>
+                            </div>
+
+                            {(group.trackUrl || group.coverImageKey) && (
+                                <div class="mt-3 flex flex-wrap items-center gap-3">
+                                    <button
+                                        type="button"
+                                        class="cert-open-modal text-xs text-[color:var(--accent)] hover:underline"
+                                        data-cert-title={`Certificado da trilha ${group.name}`}
+                                        data-cert-link={group.trackUrl}
+                                        data-cert-image={group.coverImageKey ? `/uploads/${group.coverImageKey}` : ""}
+                                    >
+                                        Visualizar certificado da trilha
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         <div class="p-6 space-y-4">
+                            <p class="text-xs text-muted">
+                                {group.items.length} {group.hasTrack ? "cursos nesta trilha" : "cursos avulsos"}
+                            </p>
                             <ul class="space-y-4">
                                 {group.items.map((cert: any) => (
                                     <li class="border-b border-[color:var(--border)]/60 pb-3 last:border-0 last:pb-0 cert-item" data-title={cert.title} data-issuer={cert.issuer} data-group={group.name}>
@@ -81,17 +254,21 @@ const groups = Object.values(groupedCerts);
                                         </h3>
                                         <div class="flex flex-wrap justify-between gap-2 text-xs text-muted mt-1">
                                             <span>{cert.issuer}</span>
-                                            <span>{new Date(cert.date).toLocaleDateString()}</span>
+                                            <span>{new Date(cert.date).toLocaleDateString("pt-BR")}</span>
                                         </div>
-                                        {cert.url && (
-                                            <a
-                                                href={cert.url}
-                                                target="_blank"
-                                                class="block mt-2 text-xs text-[color:var(--accent)] hover:underline"
-                                            >
-                                                Ver credencial ↗
-                                            </a>
-                                        )}
+                                        <div class="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                                            {cert.image_key && (
+                                                <button
+                                                    type="button"
+                                                    class="cert-open-modal text-[color:var(--accent)] hover:underline"
+                                                    data-cert-title={cert.title}
+                                                    data-cert-link={cert.url || ""}
+                                                    data-cert-image={`/uploads/${cert.image_key}`}
+                                                >
+                                                    Visualizar certificado
+                                                </button>
+                                            )}
+                                        </div>
                                     </li>
                                 ))}
                             </ul>
@@ -110,12 +287,94 @@ const groups = Object.values(groupedCerts);
         </div>
     </main>
 
+    <div
+        id="cert-modal"
+        class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 px-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cert-modal-title"
+    >
+        <div class="w-full max-w-3xl rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 sm:p-6">
+            <div class="mb-4 flex items-start justify-between gap-4">
+                <h2 id="cert-modal-title" class="text-lg font-bold">Certificado</h2>
+                <button id="cert-modal-close" type="button" class="text-sm text-muted hover:text-white">
+                    Fechar
+                </button>
+            </div>
+
+            <div class="space-y-4">
+                <img
+                    id="cert-modal-image"
+                    alt="Visualizacao do certificado"
+                    class="hidden max-h-[70vh] w-full rounded border border-[color:var(--border)] object-contain"
+                />
+                <p id="cert-modal-empty" class="hidden text-sm text-muted">
+                    Este certificado nao possui imagem cadastrada. Use o botao abaixo para abrir o link oficial.
+                </p>
+                <div class="flex flex-wrap items-center gap-3">
+                    <a
+                        id="cert-modal-link"
+                        href="#"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="hidden rounded-md border border-[color:var(--accent)] px-3 py-2 text-sm text-[color:var(--accent)] hover:bg-[color:var(--accent)]/10"
+                    >
+                        Abrir link do certificado ↗
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script is:inline data-astro-rerun>
         (() => {
             const input = document.getElementById('cert-search');
             if (!input) return;
             
             const items = Array.from(document.querySelectorAll('.cert-item'));
+            const modal = document.getElementById('cert-modal');
+            const modalTitle = document.getElementById('cert-modal-title');
+            const modalImage = document.getElementById('cert-modal-image');
+            const modalEmpty = document.getElementById('cert-modal-empty');
+            const modalLink = document.getElementById('cert-modal-link');
+            const modalClose = document.getElementById('cert-modal-close');
+
+            const closeModal = () => {
+                if (!modal || !modalImage || !modalEmpty || !modalLink) return;
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                modalImage.classList.add('hidden');
+                modalEmpty.classList.add('hidden');
+                modalLink.classList.add('hidden');
+                modalImage.removeAttribute('src');
+                modalLink.setAttribute('href', '#');
+            };
+
+            const openModal = ({ title, image, link }) => {
+                if (!modal || !modalTitle || !modalImage || !modalEmpty || !modalLink) return;
+
+                modalTitle.textContent = title || 'Certificado';
+
+                if (image) {
+                    modalImage.setAttribute('src', image);
+                    modalImage.classList.remove('hidden');
+                    modalEmpty.classList.add('hidden');
+                } else {
+                    modalImage.classList.add('hidden');
+                    modalEmpty.classList.remove('hidden');
+                }
+
+                if (link) {
+                    modalLink.setAttribute('href', link);
+                    modalLink.classList.remove('hidden');
+                } else {
+                    modalLink.classList.add('hidden');
+                    modalLink.setAttribute('href', '#');
+                }
+
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            };
 
             function filter(term) {
                 const query = (term || '').trim().toLowerCase();
@@ -134,6 +393,29 @@ const groups = Object.values(groupedCerts);
             }
 
             input.addEventListener('input', (e) => filter(e.target.value));
+
+            document.querySelectorAll('.cert-open-modal').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const card = button.closest('.cert-card');
+                    const fallbackImage = card?.querySelector('.cert-item img')?.getAttribute('src') || '';
+                    openModal({
+                        title: button.dataset.certTitle || 'Certificado',
+                        image: button.dataset.certImage || fallbackImage,
+                        link: button.dataset.certLink || '',
+                    });
+                });
+            });
+
+            modalClose?.addEventListener('click', closeModal);
+            modal?.addEventListener('click', (event) => {
+                if (event.target === modal) closeModal();
+            });
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && modal && !modal.classList.contains('hidden')) {
+                    closeModal();
+                }
+            });
+
             filter(input.value);
         })();
     </script>

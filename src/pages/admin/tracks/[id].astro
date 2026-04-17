@@ -1,0 +1,381 @@
+---
+import { env } from "cloudflare:workers";
+import { z } from "zod";
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { ensureAdminTables, verifyPassword } from "../../../utils/auth";
+import { ensureCoreTables } from "../../../utils/db";
+
+const { id } = Astro.params;
+const isNew = id === "new";
+const TRACK_IMAGE_MAX_SIZE = 2 * 1024 * 1024;
+const TRACK_IMAGE_ALLOWED_TYPE = "image/webp";
+const TRACK_IMAGE_KEY_PREFIX = "track-certificates";
+
+let track = {
+    name: "",
+    url: "",
+    image_key: "",
+    image_mime: "",
+    image_size_bytes: 0,
+    image_updated_at: "",
+};
+
+let errorMessage = "";
+
+const getExistingImageKey = async (trackId: string | number) => {
+    const current = await env.DB.prepare(
+        "SELECT image_key FROM certification_tracks WHERE id = ?",
+    )
+        .bind(trackId)
+        .first();
+    return String((current as any)?.image_key || "");
+};
+
+const trackSchema = z.object({
+    name: z.string().trim().min(2, "Informe o nome da trilha."),
+    url: z
+        .string()
+        .trim()
+        .optional()
+        .transform((v) => v || ""),
+    password: z.string().min(8, "Senha obrigatória."),
+});
+
+if (Astro.request.method === "POST") {
+    try {
+        await ensureAdminTables(env);
+        await ensureCoreTables(env);
+        const formData = await Astro.request.formData();
+        const file = formData.get("track_certificate_image");
+        const removeCurrentImage = formData.get("remove_current_image") === "on";
+        const parsed = trackSchema.safeParse({
+            name: formData.get("name"),
+            url: formData.get("url"),
+            password: formData.get("password"),
+        });
+
+        if (!parsed.success) {
+            errorMessage = parsed.error.issues[0]?.message || "Dados inválidos.";
+        } else {
+            const { password, ...payload } = parsed.data;
+            const passwordOk = await verifyPassword(password, env);
+            if (!passwordOk) {
+                throw new Error("Senha incorreta. Somente ações autenticadas podem alterar dados.");
+            }
+
+            let trackId: string | number = id as string;
+
+            if (isNew) {
+                const insertResult = await env.DB.prepare(
+                    "INSERT INTO certification_tracks (name, url) VALUES (?, ?)",
+                )
+                    .bind(payload.name, payload.url)
+                    .run();
+                trackId = insertResult.meta?.last_row_id as number;
+            } else {
+                const currentTrack = await env.DB.prepare(
+                    "SELECT id, name FROM certification_tracks WHERE id = ?",
+                )
+                    .bind(id)
+                    .first();
+
+                if (!currentTrack) {
+                    throw new Error("Trilha não encontrada.");
+                }
+
+                await env.DB.prepare(
+                    "UPDATE certification_tracks SET name=?, url=? WHERE id=?",
+                )
+                    .bind(payload.name, payload.url, id)
+                    .run();
+
+                await env.DB.prepare(
+                    `UPDATE certifications
+                     SET track_id = ?, group_name = ?, track_url = ?
+                     WHERE track_id = ? OR (track_id IS NULL AND group_name = ?)`
+                )
+                    .bind(
+                        id,
+                        payload.name,
+                        payload.url,
+                        id,
+                        (currentTrack as any).name,
+                    )
+                    .run();
+            }
+
+            if (removeCurrentImage) {
+                const currentImageKey = await getExistingImageKey(trackId);
+                if (currentImageKey && env?.R2) {
+                    await env.R2.delete(currentImageKey);
+                }
+                await env.DB.prepare(
+                    "UPDATE certification_tracks SET image_key = NULL, image_mime = NULL, image_size_bytes = NULL, image_updated_at = NULL WHERE id = ?",
+                )
+                    .bind(trackId)
+                    .run();
+            }
+
+            if (file instanceof File && file.size > 0) {
+                if (!env?.R2) {
+                    throw new Error("R2 não configurado para upload do certificado da trilha.");
+                }
+                if (file.type !== TRACK_IMAGE_ALLOWED_TYPE) {
+                    throw new Error("A imagem do certificado da trilha deve estar em WebP.");
+                }
+                if (file.size > TRACK_IMAGE_MAX_SIZE) {
+                    throw new Error("A imagem otimizada excede 2MB.");
+                }
+
+                const previousImageKey = await getExistingImageKey(trackId);
+                const key = `${TRACK_IMAGE_KEY_PREFIX}/track-${trackId}-${Date.now()}.webp`;
+                const imageBuffer = await file.arrayBuffer();
+
+                await env.R2.put(key, imageBuffer, {
+                    httpMetadata: {
+                        contentType: TRACK_IMAGE_ALLOWED_TYPE,
+                    },
+                });
+
+                await env.DB.prepare(
+                    "UPDATE certification_tracks SET image_key = ?, image_mime = ?, image_size_bytes = ?, image_updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                )
+                    .bind(key, TRACK_IMAGE_ALLOWED_TYPE, file.size, trackId)
+                    .run();
+
+                if (previousImageKey && previousImageKey !== key) {
+                    await env.R2.delete(previousImageKey);
+                }
+            }
+
+            return Astro.redirect("/admin/tracks");
+        }
+    } catch (e: any) {
+        console.error(e);
+        errorMessage = errorMessage || e?.message || "Erro ao salvar trilha.";
+    }
+}
+
+if (!isNew && Astro.request.method === "GET") {
+    await ensureCoreTables(env);
+    const result = await env.DB.prepare(
+        "SELECT * FROM certification_tracks WHERE id = ?",
+    )
+        .bind(id)
+        .first();
+    if (result) track = result as any;
+}
+---
+
+<AdminLayout title={isNew ? "Nova Trilha" : "Editar Trilha"}>
+    <h1 class="text-3xl font-bold mb-8">
+        {isNew ? "Nova Trilha" : "Editar Trilha"}
+    </h1>
+
+    {errorMessage && (
+        <div class="mb-4 rounded-lg border border-red-500/60 bg-red-500/10 text-red-200 px-4 py-3 text-sm">
+            {errorMessage}
+        </div>
+    )}
+
+    <form method="POST" enctype="multipart/form-data" class="max-w-2xl space-y-6" data-require-auth>
+        <div>
+            <label class="block text-sm font-medium mb-1">Nome da Trilha</label>
+            <input
+                type="text"
+                name="name"
+                value={track.name}
+                required
+                class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+            />
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium mb-1"
+                >URL do Certificado da Trilha</label
+            >
+            <input
+                type="url"
+                name="url"
+                value={track.url}
+                class="w-full bg-slate-800 border border-slate-700 rounded p-2"
+            />
+        </div>
+
+        <div class="space-y-3 rounded-lg border border-slate-700 p-4">
+            <h2 class="text-lg font-semibold">Imagem do certificado da trilha</h2>
+            {
+                !isNew && track.image_key && (
+                    <div class="space-y-2">
+                        <img
+                            src={`/uploads/${track.image_key}`}
+                            alt={`Imagem do certificado da trilha ${track.name}`}
+                            class="w-full max-w-sm rounded border border-slate-700"
+                            loading="lazy"
+                        />
+                        <label class="inline-flex items-center gap-2 text-xs text-red-300">
+                            <input type="checkbox" name="remove_current_image" class="rounded" />
+                            Remover imagem atual ao salvar
+                        </label>
+                    </div>
+                )
+            }
+
+            <label class="block text-sm font-medium" for="track-certificate-image-input">
+                Upload do certificado da trilha (PDF, PNG, JPG ou WebP -> otimizado para .webp, até 2MB)
+            </label>
+            <input
+                type="file"
+                name="track_certificate_image"
+                accept="application/pdf,image/*"
+                id="track-certificate-image-input"
+                class="w-full text-sm"
+            />
+            <p id="track-certificate-image-status" class="text-xs text-slate-400">
+                O arquivo selecionado será convertido para WebP no navegador antes do upload.
+            </p>
+            <img
+                id="track-certificate-image-preview"
+                alt="Prévia da imagem otimizada"
+                class="hidden w-full max-w-sm rounded border border-slate-700"
+            />
+        </div>
+
+        <div class="flex gap-4 pt-4">
+            <button
+                class="bg-purple-600 hover:bg-purple-500 px-6 py-2 rounded font-bold transition"
+                >Salvar</button
+            >
+            <a
+                href="/admin/tracks"
+                class="bg-slate-700 hover:bg-slate-600 px-6 py-2 rounded font-bold transition"
+                >Cancelar</a
+            >
+        </div>
+    </form>
+
+    <script is:inline data-astro-rerun>
+        (() => {
+            const input = document.getElementById("track-certificate-image-input");
+            const status = document.getElementById("track-certificate-image-status");
+            const preview = document.getElementById("track-certificate-image-preview");
+            if (!input || !status || !preview) return;
+
+            const MAX_DIMENSION = 1800;
+            const WEBP_QUALITY = 0.82;
+
+            const readImage = (file) =>
+                new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const img = new Image();
+                        img.onload = () => resolve(img);
+                        img.onerror = reject;
+                        img.src = String(reader.result || "");
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+
+            let cachedPdfJs = null;
+            const loadPdfJs = async () => {
+                if (cachedPdfJs) return cachedPdfJs;
+                const mod = await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.min.mjs");
+                mod.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.worker.min.mjs";
+                cachedPdfJs = mod;
+                return cachedPdfJs;
+            };
+
+            const readPdfFirstPage = async (file) => {
+                const pdfjsLib = await loadPdfJs();
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                const page = await pdf.getPage(1);
+
+                const baseViewport = page.getViewport({ scale: 1 });
+                const ratio = Math.min(1, MAX_DIMENSION / Math.max(baseViewport.width, baseViewport.height));
+                const viewport = page.getViewport({ scale: ratio });
+
+                const canvas = document.createElement("canvas");
+                const ctx = canvas.getContext("2d", { alpha: false });
+                if (!ctx) throw new Error("Não foi possível preparar canvas para PDF");
+
+                canvas.width = Math.max(1, Math.round(viewport.width));
+                canvas.height = Math.max(1, Math.round(viewport.height));
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                await page.render({ canvasContext: ctx, viewport }).promise;
+                return canvas;
+            };
+
+            const renderImageToCanvas = async (file) => {
+                const image = await readImage(file);
+                const ratio = Math.min(1, MAX_DIMENSION / Math.max(image.width, image.height));
+                const width = Math.max(1, Math.round(image.width * ratio));
+                const height = Math.max(1, Math.round(image.height * ratio));
+
+                const canvas = document.createElement("canvas");
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext("2d");
+                if (!ctx) throw new Error("Não foi possível preparar canvas");
+                ctx.drawImage(image, 0, 0, width, height);
+                return canvas;
+            };
+
+            input.addEventListener("change", async () => {
+                const file = input.files?.[0];
+                if (!file) {
+                    preview.classList.add("hidden");
+                    status.textContent = "A imagem selecionada será convertida para WebP no navegador antes do upload.";
+                    return;
+                }
+
+                if (!(file.type === "application/pdf" || file.type.startsWith("image/"))) {
+                    input.value = "";
+                    status.textContent = "Arquivo inválido. Envie PDF, PNG, JPG ou WebP.";
+                    preview.classList.add("hidden");
+                    return;
+                }
+
+                try {
+                    status.textContent = "Otimizando imagem para WebP...";
+                    const canvas = file.type === "application/pdf"
+                        ? await readPdfFirstPage(file)
+                        : await renderImageToCanvas(file);
+
+                    const optimizedBlob = await new Promise((resolve, reject) => {
+                        canvas.toBlob(
+                            (blob) => (blob ? resolve(blob) : reject(new Error("Falha ao gerar WebP"))),
+                            "image/webp",
+                            WEBP_QUALITY,
+                        );
+                    });
+
+                    const optimizedFile = new File(
+                        [optimizedBlob],
+                        `${(file.name || "certificado-trilha").replace(/\.[^.]+$/u, "")}.webp`,
+                        { type: "image/webp" },
+                    );
+
+                    const dt = new DataTransfer();
+                    dt.items.add(optimizedFile);
+                    input.files = dt.files;
+
+                    preview.src = URL.createObjectURL(optimizedBlob);
+                    preview.classList.remove("hidden");
+
+                    const beforeKb = (file.size / 1024).toFixed(1);
+                    const afterKb = (optimizedFile.size / 1024).toFixed(1);
+                    const sourceType = file.type === "application/pdf" ? "PDF" : "imagem";
+                    status.textContent = `Otimizado (${sourceType}): ${beforeKb}KB -> ${afterKb}KB (WebP)`;
+                } catch (error) {
+                    console.error(error);
+                    input.value = "";
+                    preview.classList.add("hidden");
+                    status.textContent = "Não foi possível converter o arquivo para WebP.";
+                }
+            });
+        })();
+    </script>
+</AdminLayout>
