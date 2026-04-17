@@ -130,18 +130,30 @@ const { title } = Astro.props;
                     >
                 </div>
 
-                <div class="space-y-3">
+                <form id="auth-modal-form" class="space-y-3" autocomplete="on">
                     <div>
+                        <input
+                            type="text"
+                            id="admin_username"
+                            name="username"
+                            value="admin"
+                            autocomplete="username"
+                            tabindex="-1"
+                            aria-hidden="true"
+                            class="sr-only"
+                        />
                         <label
                             class="block text-sm font-medium mb-1"
-                            for="auth-password">Senha</label
+                            for="admin_password">Senha</label
                         >
                         <input
-                            id="auth-password"
+                            id="admin_password"
                             name="password"
                             type="password"
                             autocomplete="current-password"
                             inputmode="text"
+                            minlength="8"
+                            required
                             class="w-full surface rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
                         />
                     </div>
@@ -155,6 +167,7 @@ const { title } = Astro.props;
                             type="text"
                             inputmode="numeric"
                             pattern="[0-9]{6}"
+                            name="code"
                             autocomplete="one-time-code"
                             class="w-full surface rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
                         />
@@ -162,16 +175,17 @@ const { title } = Astro.props;
                             Use o código do seu aplicativo autenticador.
                         </p>
                     </div>
-                </div>
+                
 
                 <div class="flex justify-end gap-3 pt-2">
-                    <button id="auth-cancel" class="btn btn-ghost"
+                    <button id="auth-cancel" type="button" class="btn btn-ghost"
                         >Cancelar</button
                     >
-                    <button id="auth-confirm" class="btn btn-primary"
+                    <button id="auth-confirm" type="submit" class="btn btn-primary"
                         >Confirmar</button
                     >
                 </div>
+                </form>
             </div>
         </div>
 
@@ -183,10 +197,11 @@ const { title } = Astro.props;
                 const menuBtn = document.getElementById("admin-menu-toggle");
                 const sidebar = document.getElementById("admin-sidebar");
                 const modal = document.getElementById("auth-modal");
+                const modalForm = document.getElementById("auth-modal-form");
                 const modalClose = document.getElementById("auth-modal-close");
                 const modalCancel = document.getElementById("auth-cancel");
                 const modalConfirm = document.getElementById("auth-confirm");
-                const passwordInput = document.getElementById("auth-password");
+                const passwordInput = document.getElementById("admin_password");
                 const codeWrapper =
                     document.getElementById("auth-totp-wrapper");
                 const codeInput = document.getElementById("auth-code");
@@ -257,6 +272,18 @@ const { title } = Astro.props;
                     }
                     pwdField.value = pwd;
 
+                    let usernameField = form.querySelector(
+                        'input[name="username"][data-injected="true"]',
+                    );
+                    if (!usernameField) {
+                        usernameField = document.createElement("input");
+                        usernameField.type = "hidden";
+                        usernameField.name = "username";
+                        usernameField.setAttribute("data-injected", "true");
+                        form.appendChild(usernameField);
+                    }
+                    usernameField.value = "admin";
+
                     if (requireTotp) {
                         let codeField = form.querySelector(
                             'input[name="code"][data-injected="true"]',
@@ -295,6 +322,10 @@ const { title } = Astro.props;
                     if (ev.target === modal) closeModal();
                 });
                 modalConfirm?.addEventListener("click", handleConfirm);
+                modalForm?.addEventListener("submit", (ev) => {
+                    ev.preventDefault();
+                    handleConfirm();
+                });
                 passwordInput?.addEventListener("keydown", (ev) => {
                     if (ev.key === "Enter") {
                         ev.preventDefault();
