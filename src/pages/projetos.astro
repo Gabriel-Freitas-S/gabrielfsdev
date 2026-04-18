@@ -6,7 +6,7 @@ import { ensureCoreTables } from "../utils/db";
 await ensureCoreTables(env);
 
 const { results: projects } = await env.DB.prepare(
-    "SELECT * FROM projects WHERE is_active = 1 ORDER BY order_position DESC, last_updated DESC"
+    "SELECT * FROM projects WHERE is_active = 1 ORDER BY order_position ASC, last_updated ASC"
 ).run();
 
 interface Project {
@@ -28,13 +28,19 @@ interface Project {
 const projectList = (projects || []) as Project[];
 
 // Parse JSON fields and prepare for display
-const parsedProjects = projectList.map((p) => ({
-    ...p,
-    displayName: p.custom_name || p.name,
-    displayDescription: p.custom_description || p.description,
-    technologies: JSON.parse(p.technologies || "[]") as string[],
-    topics: JSON.parse(p.topics || "[]") as string[],
-}));
+const parsedProjects = projectList.map((p) => {
+    const liveUrl = typeof p.live_url === "string" ? p.live_url.trim() : "";
+
+    return {
+        ...p,
+        displayName: p.custom_name || p.name,
+        displayDescription: p.custom_description || p.description,
+        technologies: JSON.parse(p.technologies || "[]") as string[],
+        topics: JSON.parse(p.topics || "[]") as string[],
+        liveUrl,
+        hasLiveUrl: liveUrl.length > 0 && liveUrl !== "0",
+    };
+});
 
 // Get unique technologies for filtering
 const allTechs = new Set<string>();
@@ -96,9 +102,15 @@ const uniqueTechs = Array.from(allTechs).sort();
                                     {project.displayName}
                                 </h2>
                                 {project.is_private ? (
-                                    <span class="badge">Privado</span>
+                                    <span class="inline-flex items-center gap-1 rounded-full border border-red-500/40 bg-red-500/15 px-3 py-1 text-xs font-semibold text-red-300">
+                                        <span aria-hidden="true">🔒</span>
+                                        Privado
+                                    </span>
                                 ) : (
-                                    <span class="badge">Publico</span>
+                                    <span class="inline-flex items-center gap-1 rounded-full border border-green-500/40 bg-green-500/15 px-3 py-1 text-xs font-semibold text-green-300">
+                                        <span aria-hidden="true">🔓</span>
+                                        Publico
+                                    </span>
                                 )}
                             </div>
                         </div>
@@ -146,9 +158,9 @@ const uniqueTechs = Array.from(allTechs).sort();
                                         Abrir GitHub ↗
                                     </a>
                                 )}
-                                {project.live_url && (
+                                {project.hasLiveUrl && (
                                     <a
-                                        href={project.live_url}
+                                        href={project.liveUrl}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         class="rounded-md border border-[color:var(--border)] px-3 py-2 text-sm text-[color:var(--text)] hover:bg-[color:var(--surface-2)]"
@@ -156,7 +168,7 @@ const uniqueTechs = Array.from(allTechs).sort();
                                         Ver projeto ao vivo ↗
                                     </a>
                                 )}
-                                {!project.live_url && project.is_private && (
+                                {!project.hasLiveUrl && Boolean(project.is_private) && (
                                     <span class="rounded-md border border-[color:var(--border)] px-3 py-2 text-sm text-muted">
                                         Sem link publico
                                     </span>

@@ -1,0 +1,181 @@
+{
+  "project": {
+    "name": "gabrielfsdev",
+    "description": "Portfólio com painel admin, sincronização GitHub e deploy seguro em Cloudflare Workers",
+    "version": "0.1.0",
+    "astroVersion": "6.1.7",
+    "nodeVersion": "^20.0.0"
+  },
+  "stack": {
+    "framework": "Astro 6 (SSR)",
+    "adapter": "@astrojs/cloudflare",
+    "styling": "Tailwind CSS 4",
+    "language": "TypeScript + JavaScript",
+    "runtime": "Cloudflare Workers",
+    "database": "D1 (SQLite)",
+    "storage": "R2 (assets)",
+    "session": "KV Namespace"
+  },
+  "structure": {
+    "srcPages": [
+      "index.astro (hero editável)",
+      "experiencia.astro (timeline)",
+      "certificacoes.astro (listagem)",
+      "projetos.astro (GitHub sync - público)",
+      "admin/ (painel protegido)"
+    ],
+    "adminRoutes": [
+      "login.astro",
+      "dashboard.astro",
+      "password.astro",
+      "hero-image.ts",
+      "projects/ (CRUD projetos)"
+    ],
+    "utils": [
+      "db.ts (D1 queries, schema)",
+      "auth.ts (autenticação, hash SHA-256)",
+      "github.ts (sincronização GitHub)",
+      "cleanup-sessions.ts (limpeza KV)"
+    ]
+  },
+  "features": {
+    "hero": {
+      "type": "Editável",
+      "fields": ["title", "subtitle", "image (R2)"],
+      "protection": "admin_session cookie"
+    },
+    "experiencias": {
+      "type": "CRUD",
+      "source": "D1 ou dados legados",
+      "fields": ["title", "company", "role", "dates"]
+    },
+    "certificacoes": {
+      "type": "CRUD",
+      "source": "D1 ou dados legados",
+      "fields": ["title", "issuer", "date", "image", "track_url"]
+    },
+    "projetos": {
+      "type": "GitHub Sync (público/privado)",
+      "sync": "Manual + Automático (seg 00:00 UTC)",
+      "fields": [
+        "name",
+        "description",
+        "technologies (array)",
+        "is_private (badge visual)",
+        "github_url",
+        "live_url",
+        "stars",
+        "topics (array)"
+      ],
+      "customization": [
+        "custom_name (override)",
+        "custom_description (override)",
+        "is_active (visibilidade)",
+        "order_position (ordenação manual)"
+      ],
+      "badge": {
+        "private": "🔒 Vermelho/Cadeado fechado",
+        "public": "🔓 Verde/Cadeado aberto"
+      }
+    }
+  },
+  "authentication": {
+    "type": "SHA-256 hash + cookie httpOnly",
+    "storage": "D1 (admin_settings)",
+    "session": "KV Namespace (SESSION)",
+    "middleware": "Valida /admin/* routes",
+    "protection": {
+      "sensitive_actions": "Modal de confirmação de senha"
+    }
+  },
+  "deployment": {
+    "default": "npm run deploy (preview)",
+    "preview": "npm run deploy:preview",
+    "production": "npm run deploy:production (exige frase: AUTORIZO_DEPLOY_PRODUCAO_GABRIELFSDEV)",
+    "validation": "Build obrigatório antes de deploy"
+  },
+  "environment": {
+    "secrets": [
+      "ADMIN_PASSWORD",
+      "GITHUB_USERNAME",
+      "GITHUB_TOKEN"
+    ],
+    "bindings": [
+      "DB (D1)",
+      "R2 (bucket)",
+      "SESSION (KV)"
+    ]
+  },
+  "commands": {
+    "dev": "npm run dev",
+    "build": "npm run build",
+    "preview": "npm run preview",
+    "deploy": "npm run deploy",
+    "deploy:preview": "npm run deploy:preview",
+    "deploy:production": "npm run deploy:production"
+  },
+  "agents": {
+    "context": "AGENT_CONTEXT.md",
+    "patterns": [
+      "Padrões visuais em src/styles/global.css",
+      "Rota admin protegida por middleware",
+      "GitHub sync em src/utils/github.ts",
+      "Deploy seguro via scripts/deploy-cloudflare.cjs"
+    ],
+    "critical_points": [
+      "Build obrigatório antes de qualquer deploy",
+      "Produção exige confirmação explícita",
+      "Sincronização GitHub não deleta projetos legados",
+      "Badge de privacidade é renderização condicional do campo is_private"
+    ]
+  },
+  "files": {
+    "root": [
+      "package.json",
+      "tsconfig.json",
+      "astro.config.mjs",
+      "wrangler.toml",
+      "tailwind.config.js",
+      "README.md",
+      ".agent.json",
+      "AGENT_CONTEXT.md"
+    ],
+    "src": [
+      "pages/**/*.astro",
+      "layouts/*.astro",
+      "utils/*.ts",
+      "styles/global.css",
+      "middleware.ts"
+    ],
+    "db": [
+      "schema.sql",
+      "seed-legacy.sql"
+    ],
+    "scripts": [
+      "deploy-cloudflare.cjs"
+    ]
+  },
+  "patterns": {
+    "visual": {
+      "classes": ["badge", "card", "surface", "surface-soft", "text-muted"],
+      "container": "max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14",
+      "theme": "Dark mode (padrão)",
+      "transitions": "150-300ms smooth"
+    },
+    "data": {
+      "customization": ["name", "description", "position"],
+      "ordering": "order_position (desc) + last_updated (desc)",
+      "soft_delete": "is_active (não remoção física)"
+    },
+    "github_sync": {
+      "endpoint": "POST /admin/projects/sync-cron",
+      "authentication": "Cloudflare headers",
+      "update": "Sem deletar projetos legados"
+    }
+  },
+  "validation": {
+    "build": "npm run build (antes de qualquer deploy)",
+    "deploy": "Produção exige confirmação em terminal",
+    "visual": "Conferir badges, cards, links, dark mode"
+  }
+}

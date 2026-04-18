@@ -13,6 +13,7 @@ export interface GitHubRepo {
     topics: string[];
     pushed_at: string | null;
     language: string | null;
+    languages_url?: string;
     languages?: Record<string, number>;
 }
 
@@ -107,10 +108,42 @@ export async function fetchGitHubRepos(
 
             const data: GitHubRepo[] = await response.json();
 
-            if (data.length === 0) {
+            const authHeaders = {
+                ...(sanitizedToken ? { Authorization: `Bearer ${sanitizedToken}` } : {}),
+                Accept: "application/vnd.github.v3+json",
+                "User-Agent": "gabrielfsdev-sync",
+            };
+
+            const reposWithLanguages = await Promise.all(
+                data.map(async (repo) => {
+                    if (!repo.languages_url) {
+                        return repo;
+                    }
+
+                    try {
+                        const languagesResponse = await fetch(repo.languages_url, {
+                            headers: authHeaders,
+                        });
+
+                        if (!languagesResponse.ok) {
+                            return repo;
+                        }
+
+                        const languages = (await languagesResponse.json()) as Record<string, number>;
+                        return {
+                            ...repo,
+                            languages,
+                        };
+                    } catch {
+                        return repo;
+                    }
+                })
+            );
+
+            if (reposWithLanguages.length === 0) {
                 hasMore = false;
             } else {
-                repos.push(...data);
+                repos.push(...reposWithLanguages);
                 page++;
             }
 
@@ -134,12 +167,26 @@ export async function fetchGitHubRepos(
  * Extract primary technologies from a repo's language and topics
  */
 export function extractTechnologies(repo: GitHubRepo): string[] {
-    const techs = new Set<string>();
+    const techs = new Map<string, string>();
     const topics = Array.isArray(repo.topics) ? repo.topics : [];
+
+    const addTech = (value: string) => {
+        const normalized = value.trim();
+        if (!normalized) return;
+        const key = normalized.toLowerCase();
+        if (!techs.has(key)) {
+            techs.set(key, normalized);
+        }
+    };
 
     // Add primary language
     if (repo.language) {
-        techs.add(repo.language);
+        addTech(repo.language);
+    }
+
+    // Add all languages detected by GitHub linguist
+    if (repo.languages) {
+        Object.keys(repo.languages).forEach((language) => addTech(language));
     }
 
     // Add relevant topics as technologies
@@ -155,9 +202,9 @@ export function extractTechnologies(repo: GitHubRepo): string[] {
         );
     });
 
-    techTopics.forEach((topic) => techs.add(topic));
+    techTopics.forEach((topic) => addTech(topic));
 
-    return Array.from(techs).slice(0, 10); // Max 10 technologies
+    return Array.from(techs.values()).slice(0, 12); // Max 12 technologies
 }
 
 /**
